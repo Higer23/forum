@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="de" class="bg-page">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Thema – Higum Forum</title>
+  <meta name="description" content="Themendetails und Diskussion im Higum Forum." />
+  <link rel="stylesheet" href="style.css" />
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- EmailJS (für konsistente Auth-Flows) -->
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+</head>
+<body>
+  <!-- ===================== HEADER ===================== -->
+  <header class="site-header">
+    <div class="header-inner">
+      <a href="index.html" class="brand" aria-label="Higum Startseite">
+        <i data-lucide="messages-square" class="brand-icon"></i>
+        <span class="brand-name">Higum</span>
+      </a>
+
+      <div class="header-search">
+        <a href="index.html" class="back-link">
+          <i data-lucide="arrow-left"></i>
+          <span>Zurück zur Übersicht</span>
+        </a>
+      </div>
+
+      <div class="header-actions">
+        <!-- Sichtbar, wenn NICHT eingeloggt -->
+        <div id="auth-buttons" class="auth-buttons">
+          <a href="index.html" class="btn btn-outline">Anmelden</a>
+        </div>
+
+        <!-- Sichtbar, wenn eingeloggt -->
+        <div id="user-menu" class="user-menu hidden">
+          <img id="user-avatar" class="avatar avatar-sm" src="/placeholder.svg" alt="Profilbild" />
+          <div class="user-meta">
+            <span id="user-name" class="user-name"></span>
+            <span id="user-rank" class="user-rank"></span>
+          </div>
+          <button id="btn-logout" class="btn btn-ghost btn-icon" title="Abmelden" aria-label="Abmelden">
+            <i data-lucide="log-out"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ===================== THEMA ===================== -->
+  <main class="layout layout-single">
+    <section class="content" aria-label="Thema">
+      <!-- Ladezustand -->
+      <div id="topic-loading" class="empty-state">
+        <i data-lucide="loader-2" class="spin"></i>
+        <p>Thema wird geladen…</p>
+      </div>
+
+      <!-- Thema nicht gefunden -->
+      <div id="topic-not-found" class="empty-state hidden">
+        <i data-lucide="file-question"></i>
+        <p>Dieses Thema wurde nicht gefunden oder wurde gelöscht.</p>
+        <a href="index.html" class="btn btn-primary">Zurück zur Startseite</a>
+      </div>
+
+      <!-- Themen-Detail -->
+      <article id="topic-detail" class="topic-detail hidden">
+        <div class="topic-detail-header">
+          <div class="topic-badges">
+            <span id="topic-category-badge" class="badge badge-category"></span>
+            <span id="topic-tag-badge" class="badge badge-tag"></span>
+          </div>
+          <h1 id="topic-title" class="topic-detail-title"></h1>
+        </div>
+
+        <div class="post-card post-original">
+          <div class="post-author">
+            <img id="topic-author-avatar" class="avatar" src="/placeholder.svg" alt="Profilbild des Autors" />
+            <div class="post-author-meta">
+              <span id="topic-author-name" class="post-author-name"></span>
+              <span id="topic-author-rank" class="rank-badge"></span>
+            </div>
+            <time id="topic-date" class="post-date"></time>
+          </div>
+          <div id="topic-content" class="post-content"></div>
+        </div>
+      </article>
+
+      <!-- Antworten -->
+      <section id="comments-section" class="comments-section hidden" aria-label="Antworten">
+        <h2 class="comments-title">
+          <i data-lucide="message-circle"></i>
+          <span id="comments-count">0 Antworten</span>
+        </h2>
+
+        <!-- Antwort-Formular (Haupt) -->
+        <form id="reply-form" class="reply-form hidden">
+          <label for="reply-content" class="sr-only">Deine Antwort</label>
+          <textarea id="reply-content" rows="4" required minlength="2" placeholder="Schreibe eine Antwort…"></textarea>
+          <p id="reply-error" class="form-error hidden"></p>
+          <button type="submit" class="btn btn-primary">
+            <i data-lucide="send"></i>
+            Antworten
+          </button>
+        </form>
+
+        <p id="reply-login-hint" class="login-hint">
+          <i data-lucide="lock"></i>
+          Bitte <a href="index.html">melde dich an</a>, um zu antworten.
+        </p>
+
+        <!-- Verschachtelter Kommentarbaum -->
+        <div id="comments-tree" class="comments-tree">
+          <!-- Kommentare werden per JS gerendert -->
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <!-- ===================== TOAST ===================== -->
+  <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
+  <footer class="site-footer">
+    <p>Higum Forum – Eine Gemeinschaft für respektvolle Diskussionen.</p>
+  </footer>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

@@ -1,14 +1,223 @@
-<script src="https://giscus.app/client.js"
-        data-repo="Higer23/forum"
-        data-repo-id="R_kgDOTiQU9w"
-        data-category-id="DIC_kwDOTiQU984DB3wj"
-        data-mapping="pathname"
-        data-strict="0"
-        data-reactions-enabled="1"
-        data-emit-metadata="0"
-        data-input-position="bottom"
-        data-theme="dark_high_contrast"
-        data-lang="tr"
-        crossorigin="anonymous"
-        async>
-</script>
+<!DOCTYPE html>
+<html lang="de" class="bg-page">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Higum – Forum</title>
+  <meta name="description" content="Higum – Das moderne Forum für Diskussionen, Technik und Strategie." />
+  <link rel="stylesheet" href="style.css" />
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- EmailJS -->
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+  <!-- Cloudflare Turnstile -->
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+</head>
+<body>
+  <!-- ===================== HEADER ===================== -->
+  <header class="site-header">
+    <div class="header-inner">
+      <a href="index.html" class="brand" aria-label="Higum Startseite">
+        <i data-lucide="messages-square" class="brand-icon"></i>
+        <span class="brand-name">Higum</span>
+      </a>
+
+      <div class="header-search">
+        <i data-lucide="search" class="search-icon"></i>
+        <input type="search" id="search-input" placeholder="Themen durchsuchen…" aria-label="Themen durchsuchen" />
+      </div>
+
+      <div class="header-actions">
+        <button id="btn-new-topic" class="btn btn-primary">
+          <i data-lucide="plus"></i>
+          <span class="btn-label">Neues Thema erstellen</span>
+        </button>
+
+        <!-- Sichtbar, wenn NICHT eingeloggt -->
+        <div id="auth-buttons" class="auth-buttons">
+          <button id="btn-open-login" class="btn btn-ghost">Anmelden</button>
+          <button id="btn-open-register" class="btn btn-outline">Registrieren</button>
+      </div>
+
+        <!-- Sichtbar, wenn eingeloggt -->
+        <div id="user-menu" class="user-menu hidden">
+          <img id="user-avatar" class="avatar avatar-sm" src="/placeholder.svg" alt="Profilbild" />
+          <div class="user-meta">
+            <span id="user-name" class="user-name"></span>
+            <span id="user-rank" class="user-rank"></span>
+          </div>
+          <button id="btn-logout" class="btn btn-ghost btn-icon" title="Abmelden" aria-label="Abmelden">
+            <i data-lucide="log-out"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ===================== HAUPTBEREICH ===================== -->
+  <main class="layout">
+    <!-- Kategorien-Seitenleiste -->
+    <aside class="sidebar" aria-label="Kategorien">
+      <h2 class="sidebar-title">Kategorien</h2>
+      <nav id="category-list" class="category-list">
+        <!-- Kategorien werden per JS gerendert -->
+      </nav>
+
+      <h2 class="sidebar-title">Schlagwörter</h2>
+      <div id="tag-list" class="tag-list">
+        <!-- Tags werden per JS gerendert -->
+      </div>
+    </aside>
+
+    <!-- Themenliste -->
+    <section class="content" aria-label="Themenliste">
+      <div class="content-header">
+        <h1 id="content-title" class="content-title">Alle Themen</h1>
+        <span id="topic-count" class="topic-count"></span>
+      </div>
+
+      <div id="topic-list" class="topic-list">
+        <!-- Themen werden per JS gerendert -->
+      </div>
+
+      <div id="empty-state" class="empty-state hidden">
+        <i data-lucide="inbox"></i>
+        <p>Keine Themen gefunden. Erstelle das erste Thema!</p>
+      </div>
+
+      <nav id="pagination" class="pagination" aria-label="Seitennavigation">
+        <!-- Pagination wird per JS gerendert -->
+      </nav>
+    </section>
+  </main>
+
+  <!-- ===================== MODAL: ANMELDEN / REGISTRIEREN ===================== -->
+  <div id="auth-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title">
+    <div class="modal">
+      <button class="modal-close" data-close-modal="auth-modal" aria-label="Schließen">
+        <i data-lucide="x"></i>
+      </button>
+
+      <div class="modal-tabs" role="tablist">
+        <button id="tab-login" class="modal-tab active" role="tab" aria-selected="true">Anmelden</button>
+        <button id="tab-register" class="modal-tab" role="tab" aria-selected="false">Registrieren</button>
+      </div>
+
+      <!-- Anmelde-Formular -->
+      <form id="login-form" class="modal-form">
+        <h2 id="auth-modal-title" class="modal-title">Willkommen zurück</h2>
+        <div class="form-group">
+          <label for="login-email">E-Mail-Adresse</label>
+          <input type="email" id="login-email" required autocomplete="email" placeholder="name@beispiel.de" />
+        </div>
+        <div class="form-group">
+          <label for="login-password">Passwort</label>
+          <input type="password" id="login-password" required autocomplete="current-password" placeholder="••••••••" />
+        </div>
+        <p id="login-error" class="form-error hidden"></p>
+        <button type="submit" class="btn btn-primary btn-block">Anmelden</button>
+      </form>
+
+      <!-- Registrierungs-Formular -->
+      <form id="register-form" class="modal-form hidden">
+        <h2 class="modal-title">Konto erstellen</h2>
+        <div class="form-group">
+          <label for="register-username">Benutzername</label>
+          <input type="text" id="register-username" required minlength="3" maxlength="24" autocomplete="username" placeholder="DeinName" />
+        </div>
+        <div class="form-group">
+          <label for="register-email">E-Mail-Adresse</label>
+          <input type="email" id="register-email" required autocomplete="email" placeholder="name@beispiel.de" />
+        </div>
+        <div class="form-group">
+          <label for="register-password">Passwort (mind. 6 Zeichen)</label>
+          <input type="password" id="register-password" required minlength="6" autocomplete="new-password" placeholder="••••••••" />
+        </div>
+        <div class="form-group">
+          <div class="cf-turnstile" data-sitekey="0x4AAAAAAD80pv0OMAdNnE2Q" data-callback="onRegisterTurnstile" data-theme="dark"></div>
+        </div>
+        <p id="register-error" class="form-error hidden"></p>
+        <button type="submit" class="btn btn-primary btn-block">Bestätigungscode senden</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ===================== MODAL: OTP E-MAIL-VERIFIZIERUNG ===================== -->
+  <div id="otp-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="otp-modal-title">
+    <div class="modal modal-sm">
+      <button class="modal-close" data-close-modal="otp-modal" aria-label="Schließen">
+        <i data-lucide="x"></i>
+      </button>
+      <div class="otp-icon-wrap">
+        <i data-lucide="mail-check"></i>
+      </div>
+      <h2 id="otp-modal-title" class="modal-title center">E-Mail bestätigen</h2>
+      <p class="modal-subtitle center">
+        Wir haben einen 6-stelligen Code an <strong id="otp-email-display"></strong> gesendet.
+        Der Code ist 15 Minuten gültig.
+      </p>
+      <form id="otp-form" class="modal-form">
+        <div class="otp-inputs" id="otp-inputs">
+          <input type="text" inputmode="numeric" maxlength="1" class="otp-digit" aria-label="Ziffer 1" />
+          <input type="text" inputmode="numeric" maxlength="1" class="otp-digit" aria-label="Ziffer 2" />
+          <input type="text" inputmode="numeric" maxlength="1" class="otp-digit" aria-label="Ziffer 3" />
+          <input type="text" inputmode="numeric" maxlength="1" class="otp-digit" aria-label="Ziffer 4" />
+          <input type="text" inputmode="numeric" maxlength="1" class="otp-digit" aria-label="Ziffer 5" />
+          <input type="text" inputmode="numeric" maxlength="1" class="otp-digit" aria-label="Ziffer 6" />
+        </div>
+        <p id="otp-error" class="form-error hidden"></p>
+        <button type="submit" class="btn btn-primary btn-block">Code bestätigen</button>
+        <button type="button" id="btn-resend-otp" class="btn btn-ghost btn-block">Code erneut senden</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ===================== MODAL: NEUES THEMA ===================== -->
+  <div id="topic-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="topic-modal-title">
+    <div class="modal modal-lg">
+      <button class="modal-close" data-close-modal="topic-modal" aria-label="Schließen">
+        <i data-lucide="x"></i>
+      </button>
+      <h2 id="topic-modal-title" class="modal-title">Neues Thema erstellen</h2>
+      <form id="topic-form" class="modal-form">
+        <div class="form-group">
+          <label for="topic-title">Titel</label>
+          <input type="text" id="topic-title" required minlength="5" maxlength="120" placeholder="Worum geht es in deinem Thema?" />
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="topic-category">Kategorie</label>
+            <select id="topic-category" required>
+              <!-- Optionen werden per JS gerendert -->
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="topic-tag">Schlagwort</label>
+            <select id="topic-tag" required>
+              <!-- Optionen werden per JS gerendert -->
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="topic-content">Inhalt</label>
+          <textarea id="topic-content" required minlength="10" rows="8" placeholder="Beschreibe dein Thema ausführlich…"></textarea>
+        </div>
+        <div class="form-group">
+          <div class="cf-turnstile" data-sitekey="0x4AAAAAAD80pv0OMAdNnE2Q" data-callback="onTopicTurnstile" data-theme="dark"></div>
+        </div>
+        <p id="topic-error" class="form-error hidden"></p>
+        <button type="submit" class="btn btn-primary btn-block">Thema veröffentlichen</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ===================== TOAST ===================== -->
+  <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
+  <footer class="site-footer">
+    <p>Higum Forum – Eine Gemeinschaft für respektvolle Diskussionen.</p>
+  </footer>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

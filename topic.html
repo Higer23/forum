@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thema - Higum Forum</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+</head>
+<body>
+    <!-- HEADER / NAVBAR -->
+    <header class="navbar">
+        <div class="navbar-container">
+            <div class="navbar-left">
+                <a href="index.html" class="logo">
+                    <i data-lucide="shield-alert" class="icon-md"></i>
+                    <span>Higum</span>
+                </a>
+            </div>
+
+            <div class="navbar-center">
+                <div class="search-box">
+                    <i data-lucide="search" class="search-icon"></i>
+                    <input type="text" id="searchInput" placeholder="Themen durchsuchen...">
+                </div>
+            </div>
+
+            <div class="navbar-right">
+                <button class="btn-outline" id="loginBtn">Anmelden</button>
+                <a href="index.html" class="btn-secondary">Forum</a>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN CONTAINER -->
+    <main class="main-container topic-page">
+        <!-- TOPIC HEADER -->
+        <article class="topic-header">
+            <div class="topic-meta-top">
+                <a href="index.html" class="breadcrumb">Forum</a>
+                <span class="breadcrumb-sep">/</span>
+                <span class="breadcrumb-cat" id="topicCategory">--</span>
+            </div>
+
+            <h1 id="topicTitle" class="topic-title">--</h1>
+
+            <div class="topic-meta-info">
+                <div class="meta-author">
+                    <img id="authorAvatar" src="" alt="Avatar" class="avatar-lg">
+                    <div class="author-info">
+                        <div class="author-name">
+                            <strong id="authorUsername">--</strong>
+                            <span class="rank-badge" id="authorRank">Rekrut</span>
+                        </div>
+                        <div class="author-meta">
+                            <span id="authorCreatedDate">--</span>
+                            <span class="meta-dot">•</span>
+                            <span id="authorPoints">0 Punkte</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="topic-stats">
+                    <div class="stat-item">
+                        <i data-lucide="message-square"></i>
+                        <span id="replyCount">0 Antworten</span>
+                    </div>
+                    <div class="stat-item">
+                        <i data-lucide="eye"></i>
+                        <span id="viewCount">0 Ansichten</span>
+                    </div>
+                </div>
+            </div>
+        </article>
+
+        <!-- TOPIC BODY -->
+        <section class="topic-body">
+            <div id="topicDescription" class="topic-content">
+                <!-- Topic description will be inserted here -->
+            </div>
+
+            <div class="topic-tags" id="topicTagsContainer">
+                <!-- Tags will be inserted here -->
+            </div>
+        </section>
+
+        <!-- REPLIES SECTION -->
+        <section class="replies-section">
+            <h2 class="section-title">Antworten</h2>
+
+            <!-- REPLIES TREE -->
+            <div class="replies-container" id="repliesContainer">
+                <!-- Replies will be dynamically inserted here in nested structure -->
+            </div>
+
+            <!-- NEW REPLY FORM -->
+            <div class="reply-form-wrapper" id="replyFormWrapper">
+                <h3 class="reply-form-title">Antwort schreiben</h3>
+                
+                <form id="replyForm">
+                    <div class="form-group">
+                        <label>Deine Antwort</label>
+                        <textarea id="replyContent" rows="6" placeholder="Schreibe deine Antwort hier..." required></textarea>
+                    </div>
+
+                    <!-- Cloudflare Turnstile -->
+                    <div class="cf-turnstile" data-sitekey="0x4AAAAAAD80pv0OMAdNnE2Q" data-theme="dark"></div>
+
+                    <div class="reply-form-actions">
+                        <button type="submit" class="btn-primary">Antwort absenden</button>
+                    </div>
+                </form>
+
+                <div class="auth-prompt" id="authPromptReply" style="display: none;">
+                    <p>Du musst <button type="button" class="btn-link" id="loginPromptReply">angemeldet sein</button>, um eine Antwort zu schreiben.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- BACK TO FORUM -->
+        <div class="back-to-forum">
+            <a href="index.html" class="btn-secondary">
+                <i data-lucide="arrow-left"></i>
+                Zurück zum Forum
+            </a>
+        </div>
+    </main>
+
+    <!-- ============================= -->
+    <!-- REPLY TO REPLY MODAL -->
+    <!-- ============================= -->
+    <div class="modal" id="replyToReplyModal">
+        <div class="modal-content modal-lg">
+            <div class="modal-header">
+                <h2>Auf Antwort antworten</h2>
+                <button class="modal-close" onclick="closeModal('replyToReplyModal')">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <div class="quote-section" id="quoteSection">
+                    <!-- Quote will be inserted here -->
+                </div>
+
+                <form id="replyToReplyForm">
+                    <div class="form-group">
+                        <label>Deine Antwort</label>
+                        <textarea id="nestedReplyContent" rows="5" placeholder="Schreibe deine Antwort..." required></textarea>
+                    </div>
+
+                    <!-- Cloudflare Turnstile -->
+                    <div class="cf-turnstile" data-sitekey="0x4AAAAAAD80pv0OMAdNnE2Q" data-theme="dark"></div>
+
+                    <button type="submit" class="btn-primary btn-block" style="margin-top: 1rem;">Antwort absenden</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- LOGIN MODAL (same as index.html) -->
+    <div class="modal" id="authModal">
+        <div class="modal-content modal-lg">
+            <div class="modal-header">
+                <h2>Anmelden</h2>
+                <button class="modal-close" onclick="closeModal('authModal')">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <div class="auth-tabs">
+                    <button class="tab-btn active" data-tab="login">Anmelden</button>
+                    <button class="tab-btn" data-tab="register">Registrieren</button>
+                </div>
+
+                <!-- LOGIN TAB -->
+                <div class="tab-content active" id="loginTab">
+                    <form id="loginForm">
+                        <div class="form-group">
+                            <label>E-Mail</label>
+                            <input type="email" id="loginEmail" placeholder="deine@email.de" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Passwort</label>
+                            <input type="password" id="loginPassword" placeholder="••••••••" required>
+                        </div>
+                        <button type="submit" class="btn-primary btn-block">Anmelden</button>
+                    </form>
+                </div>
+
+                <!-- REGISTER TAB -->
+                <div class="tab-content" id="registerTab">
+                    <form id="registerForm">
+                        <div class="form-group">
+                            <label>Benutzername</label>
+                            <input type="text" id="registerUsername" placeholder="max_mustermann" required>
+                        </div>
+                        <div class="form-group">
+                            <label>E-Mail</label>
+                            <input type="email" id="registerEmail" placeholder="deine@email.de" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Passwort</label>
+                            <input type="password" id="registerPassword" placeholder="••••••••" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Passwort wiederholen</label>
+                            <input type="password" id="registerPasswordConfirm" placeholder="••••••••" required>
+                        </div>
+
+                        <!-- Cloudflare Turnstile -->
+                        <div class="cf-turnstile" data-sitekey="0x4AAAAAAD80pv0OMAdNnE2Q" data-theme="dark"></div>
+
+                        <button type="submit" class="btn-primary btn-block" style="margin-top: 1rem;">Registrieren</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- OTP MODAL -->
+    <div class="modal" id="otpModal">
+        <div class="modal-content modal-md">
+            <div class="modal-header">
+                <h2>E-Mail Bestätigung</h2>
+                <button class="modal-close" onclick="closeModal('otpModal')">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <p class="otp-description">Wir haben einen 6-stelligen Code an deine E-Mail gesendet.</p>
+                
+                <form id="otpForm">
+                    <div class="otp-input-group">
+                        <input type="text" class="otp-input" maxlength="1" placeholder="0" required>
+                        <input type="text" class="otp-input" maxlength="1" placeholder="0" required>
+                        <input type="text" class="otp-input" maxlength="1" placeholder="0" required>
+                        <input type="text" class="otp-input" maxlength="1" placeholder="0" required>
+                        <input type="text" class="otp-input" maxlength="1" placeholder="0" required>
+                        <input type="text" class="otp-input" maxlength="1" placeholder="0" required>
+                    </div>
+
+                    <button type="submit" class="btn-primary btn-block">Bestätigen</button>
+                    
+                    <div class="otp-timer">
+                        Code verfällt in: <span id="otpTimer">300</span>s
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- TOAST NOTIFICATIONS -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <script type="module" src="topic.js"></script>
+</body>
+</html>

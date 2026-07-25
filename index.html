@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Higum Forum</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+</head>
+<body>
+    <!-- HEADER / NAVBAR -->
+    <header class="navbar">
+        <div class="navbar-container">
+            <div class="navbar-left">
+                <div class="logo">
+                    <i data-lucide="shield-alert" class="icon-md"></i>
+                    <span>Higum</span>
+                </div>
+            </div>
+
+            <div class="navbar-center">
+                <div class="search-box">
+                    <i data-lucide="search" class="search-icon"></i>
+                    <input type="text" id="searchInput" placeholder="Themen durchsuchen...">
+                </div>
+            </div>
+
+            <div class="navbar-right">
+                <button class="btn-outline" id="loginBtn">Anmelden</button>
+                <button class="btn-primary" id="newTopicBtn">Neues Thema erstellen</button>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN CONTAINER -->
+    <main class="main-container">
+        <!-- CATEGORIES SIDEBAR -->
+        <aside class="categories-sidebar">
+            <h3 class="sidebar-title">Kategorien</h3>
+            <div class="categories-list" id="categoriesList">
+                <div class="category-item active" data-category="all">
+                    <i data-lucide="inbox" class="cat-icon"></i>
+                    <span>Alle Themen</span>
+                </div>
+                <div class="category-item" data-category="general">
+                    <i data-lucide="message-square" class="cat-icon"></i>
+                    <span>Allgemein</span>
+                </div>
+                <div class="category-item" data-category="announcements">
+                    <i data-lucide="megaphone" class="cat-icon"></i>
+                    <span>Ankündigungen</span>
+                </div>
+                <div class="category-item" data-category="help">
+                    <i data-lucide="help-circle" class="cat-icon"></i>
+                    <span>Hilfe & Support</span>
+                </div>
+                <div class="category-item" data-category="feedback">
+                    <i data-lucide="star" class="cat-icon"></i>
+                    <span>Feedback</span>
+                </div>
+            </div>
+
+            <div class="sidebar-divider"></div>
+
+            <h3 class="sidebar-title">Tags</h3>
+            <div class="tags-list" id="tagsList">
+                <!-- Tags werden dynamisch gefüllt -->
+            </div>
+        </aside>
+
+        <!-- TOPICS CONTENT -->
+        <div class="topics-content">
+            <!-- FILTER BAR -->
+            <div class="filter-bar">
+                <select id="sortSelect" class="select-filter">
+                    <option value="newest">Neueste zuerst</option>
+                    <option value="popular">Beliebt</option>
+                    <option value="active">Aktiv</option>
+                </select>
+                <div class="filter-right">
+                    <span class="topic-count" id="topicCount">0 Themen</span>
+                </div>
+            </div>
+
+            <!-- TOPICS LIST -->
+            <div class="topics-list" id="topicsList">
+                <!-- Topics werden hier dynamisch eingefügt -->
+            </div>
+
+            <!-- PAGINATION -->
+            <div class="pagination" id="pagination">
+                <!-- Pagination wird dynamisch gefüllt -->
+            </div>
+        </div>
+    </main>
+
+    <!-- ============================= -->
+    <!-- MODALS -->
+    <!-- ============================= -->
+
+    <!-- LOGIN/REGISTER MODAL -->
+    <div class="modal" id="authModal">
+        <div class="modal-content modal-lg">
+            <div class="modal-header">
+                <h2 id="authTitle">Anmelden</h2>
+                <button class="modal-close" onclick="closeModal('authModal')">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <div class="auth-tabs">
+                    <button class="tab-btn active" data-tab="login">Anmelden</button>
+                    <button class="tab-btn" data-tab="register">Registrieren</button>
+                </div>
+
+                <!-- LOGIN TAB -->
+                <div class="tab-content active" id="loginTab">
+                    <form id="loginForm">
+                        <div class="form-group">
+                            <label>E-Mail</label>
+                            <input type="email" id="loginEmail" placeholder="deine@email.de" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Passwort</label>
+                            <input type="password" id="loginPassword" placeholder="••••••••" required>
+                        </div>
+                        <button type="submit" class="btn-primary btn-block">Anmelden</button>
+                    </form>
+                </div>
+
+                <!-- REGISTER TAB -->
+                <div class="tab-content" id="registerTab">
+                    <form id="registerForm">
+                        <div class="form-group">
+                            <label>Benutzername</label>
+                            <input type="text" id="registerUsername" placeholder="max_mustermann" required>
+                        </div>
+                        <div class="form-group">
+                            <label>E-Mail</label>
+                            <input type="email" id="registerEmail" placeholder="deine@email.de" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Passwort</label>
+                            <input type="password" id="registerPassword" placeholder="••••••••" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Passwort wiederholen</label>
+                            <input type="password" id="registerPasswordConfirm" placeholder="••••••••" required>
+                        </div>
+
+                        <!-- Cloudflare Turnstile -->
+                        <div class="cf-turnstile" data-sitekey="0x4AAAAAAD80pv0OMAdNnE2Q" data-theme="dark"></div>
+
+                        <button type="submit" class="btn-primary btn-block" style="margin-top: 1rem;">Registrieren</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- OTP EMAIL VERIFICATION MODAL -->
+    <div class="modal" id="otpModal">
+        <div class="modal-content modal-md">
+            <div class="modal-header">
+                <h2>E-Mail Bestätigung</h2>
+                <button class="modal-close" onclick="closeModal('otpModal')">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <p class="otp-description">Wir haben einen 6-stelligen Code an deine E-Mail gesendet.</p>
+                
+                <form id="otpForm">
+                    <div class="otp-input-group">
+                        <input type="text" class="otp-input" maxlength="1" placeholder="0" required>
+                        <input type="text" class="otp-input" maxlength="1" placeholder="0" required>
+                        <input type="text" class="otp-input" maxlength="1" placeholder="0" required>
+                        <input type="text" class="otp-input" maxlength="1" placeholder="0" required>
+                        <input type="text" class="otp-input" maxlength="1" placeholder="0" required>
+                        <input type="text" class="otp-input" maxlength="1" placeholder="0" required>
+                    </div>
+
+                    <button type="submit" class="btn-primary btn-block">Bestätigen</button>
+                    
+                    <div class="otp-timer">
+                        Code verfällt in: <span id="otpTimer">300</span>s
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- NEW TOPIC MODAL -->
+    <div class="modal" id="newTopicModal">
+        <div class="modal-content modal-lg">
+            <div class="modal-header">
+                <h2>Neues Thema erstellen</h2>
+                <button class="modal-close" onclick="closeModal('newTopicModal')">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <form id="newTopicForm">
+                    <div class="form-group">
+                        <label>Kategorie</label>
+                        <select id="topicCategory" required>
+                            <option value="">-- Wähle eine Kategorie --</option>
+                            <option value="general">Allgemein</option>
+                            <option value="announcements">Ankündigungen</option>
+                            <option value="help">Hilfe & Support</option>
+                            <option value="feedback">Feedback</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Thema Titel</label>
+                        <input type="text" id="topicTitle" placeholder="Gib deinem Thema einen aussagekräftigen Titel..." required>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Beschreibung</label>
+                        <textarea id="topicDescription" rows="6" placeholder="Erläutere dein Thema hier..."></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Tags (durch Komma getrennt)</label>
+                        <input type="text" id="topicTags" placeholder="z.B. fehler, frage, vorschlag">
+                    </div>
+
+                    <!-- Cloudflare Turnstile for Topic Creation -->
+                    <div class="cf-turnstile" data-sitekey="0x4AAAAAAD80pv0OMAdNnE2Q" data-theme="dark"></div>
+
+                    <button type="submit" class="btn-primary btn-block" style="margin-top: 1rem;">Thema erstellen</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- TOAST NOTIFICATIONS -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <script type="module" src="app.js"></script>
+</body>
+</html>

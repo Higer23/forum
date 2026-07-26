@@ -1,107 +1,285 @@
-// topic.js
+/**
+ * Higum Forum - Topic Page
+ * Version: 3.0.0 - Complete Rewrite
+ */
+
 import { auth, database } from "./firebase-config.js";
-import { 
-    onAuthStateChanged, 
-    signOut 
+import {
+    onAuthStateChanged,
+    signOut,
+    createUserWithEmailAndPassword,
+    signInWithEmailAndPassword
 } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
-import { 
-    ref, set, get, push, onValue, update 
+import {
+    ref, set, get, push, onValue, update, remove
 } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-database.js";
 
-// Globale Variablen
-let currentTopic = null;
-let currentUser = null;
-let topicId = null;
-let parentReplyId = null;
+// =========================================
+// KONFIGURASYON
+// =========================================
+const CONFIG = {
+    EMAILJS_PUBLIC_KEY: "F5cGGWMEHBUJTYWe_",
+    EMAILJS_SERVICE_ID: "service_rs96mwp",
+    EMAILJS_TEMPLATE_ID: "template_uvj39wr",
+    TURNSTILE_SITEKEY: "0x4AAAAAAD80pv0OMAdNnE2Q",
+    OTP_EXPIRY_SECONDS: 300,
+    OTP_MAX_ATTEMPTS: 5,
+    MAX_NESTED_DEPTH: 5,
+    RANKS: [
+        { threshold: 0, name: "Rekrut", class: "" },
+        { threshold: 21, name: "Unteroffizier", class: "" },
+        { threshold: 101, name: "Leutnant", class: "" },
+        { threshold: 251, name: "Hauptmann", class: "" },
+        { threshold: 501, name: "Major", class: "" }
+    ]
+};
 
 // =========================================
-// HILFSFUNKTIONEN
+// DURUM YÖNETİMİ
 // =========================================
+const state = {
+    currentTopic: null,
+    currentUser: null,
+    topicId: null,
+    parentReplyId: null,
+    tempRegistrationData: null,
+    currentOTP: null,
+    otpTimerInterval: null,
+    otpAttempts: 0,
+    likedReplies: new Set(),
+    allReplies: [],
+    isOnline: navigator.onLine
+};
+
+// =========================================
+// YARDIMCI FONKSİYONLAR
+// =========================================
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function sanitizeInput(text, maxLength = 5000) {
+    if (!text) return '';
+    return text.trim().substring(0, maxLength);
+}
+
+function isValidEmail(email) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function isValidUsername(username) {
+    return /^[a-zA-Z0-9_]{3,30}$/.test(username);
+}
+
+function formatDate(timestamp) {
+    if (!timestamp) return 'Unbekannt';
+    try {
+        const date = new Date(timestamp);
+        return date.toLocaleDateString('de-DE', {
+            day: '2-digit', month: 'short', year: 'numeric',
+            hour: '2-digit', minute: '2-digit'
+        });
+    } catch (e) {
+        return 'Ungültiges Datum';
+    }
+}
+
+function getRank(points, isAdmin = false) {
+    if (isAdmin) return { name: "General (Admin)", class: "admin" };
+    for (let i = CONFIG.RANKS.length - 1; i >= 0; i--) {
+        if (points >= CONFIG.RANKS[i].threshold) {
+            return CONFIG.RANKS[i];
+        }
+    }
+    return CONFIG.RANKS[0];
+}
+
+function getCategoryLabel(category) {
+    const labels = {
+        general: 'Allgemein',
+        announcements: 'Ankündigungen',
+        help: 'Hilfe & Support',
+        feedback: 'Feedback'
+    };
+    return labels[category] || category;
+}
+
+function getFirebaseErrorMessage(code) {
+    const messages = {
+        'auth/invalid-credential': 'Falsche E-Mail oder Passwort.',
+        'auth/email-already-in-use': 'Diese E-Mail wird bereits verwendet.',
+        'auth/weak-password': 'Das Passwort muss mindestens 6 Zeichen lang sein.',
+        'auth/invalid-email': 'Ungültige E-Mail-Adresse.',
+        'auth/user-disabled': 'Dieser Account wurde deaktiviert.',
+        'auth/user-not-found': 'Kein Account mit dieser E-Mail gefunden.',
+        'auth/wrong-password': 'Falsches Passwort.',
+        'auth/too-many-requests': 'Zu viele Versuche. Bitte versuche es später.',
+        'auth/network-request-failed': 'Netzwerkfehler. Bitte prüfe deine Verbindung.'
+    };
+    return messages[code] || 'Ein unerwarteter Fehler ist aufgetreten.';
+}
 
 function showToast(message, type = 'success') {
     const container = document.getElementById('toastContainer');
     if (!container) return;
-    
+
+    const icons = {
+        success: 'check-circle',
+        error: 'alert-circle',
+        warning: 'alert-triangle',
+        info: 'info'
+    };
+
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
-    
-    let icon = type === 'success' ? 'check-circle' : type === 'error' ? 'alert-circle' : 'info';
-    toast.innerHTML = `<i data-lucide="${icon}"></i> <span>${message}</span>`;
-    
+    toast.setAttribute('role', 'alert');
+    toast.innerHTML = `
+        <i data-lucide="${icons[type] || icons.info}"></i>
+        <span>${escapeHtml(message)}</span>
+    `;
+
     container.appendChild(toast);
     if (window.lucide) window.lucide.createIcons();
-    
+
     setTimeout(() => {
         toast.classList.add('hiding');
         setTimeout(() => toast.remove(), 300);
     }, 4000);
 }
 
-window.closeModal = function(id) {
-    const modal = document.getElementById(id);
-    if (modal) modal.classList.remove('active');
-};
+function setButtonLoading(buttonId, loading) {
+    const btn = document.getElementById(buttonId);
+    if (!btn) return;
+
+    const textSpan = btn.querySelector('.btn-text');
+    const originalText = btn.dataset.originalText || textSpan?.textContent;
+
+    if (loading) {
+        btn.dataset.originalText = originalText;
+        btn.disabled = true;
+        if (textSpan) textSpan.innerHTML = '<span class="spinner"></span> Bitte warten...';
+    } else {
+        btn.disabled = false;
+        if (textSpan) textSpan.textContent = originalText || 'Absenden';
+    }
+}
 
 function openModal(id) {
     const modal = document.getElementById(id);
     if (modal) modal.classList.add('active');
 }
 
-function getRank(points, isAdmin = false) {
-    if (isAdmin) return { name: "General (Admin)", class: "admin" };
-    if (points >= 501) return { name: "Major", class: "" };
-    if (points >= 251) return { name: "Hauptmann", class: "" };
-    if (points >= 101) return { name: "Leutnant", class: "" };
-    if (points >= 21) return { name: "Unteroffizier", class: "" };
-    return { name: "Rekrut", class: "" };
-}
+window.closeModal = function(id) {
+    const modal = document.getElementById(id);
+    if (!modal) return;
 
-function formatDate(timestamp) {
-    const date = new Date(timestamp);
-    return date.toLocaleDateString('de-DE', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-}
+    modal.classList.remove('active');
 
-function getFirebaseErrorMessage(code) {
-    switch(code) {
-        case 'auth/invalid-credential': return 'Falsche E-Mail oder Passwort.';
-        case 'auth/email-already-in-use': return 'Diese E-Mail wird bereits verwendet.';
-        case 'auth/weak-password': return 'Das Passwort muss mindestens 6 Zeichen lang sein.';
-        default: return 'Ein unerwarteter Fehler ist aufgetreten.';
+    if (id === 'otpModal' && state.otpTimerInterval) {
+        clearInterval(state.otpTimerInterval);
+        state.otpTimerInterval = null;
     }
+
+    const turnstile = modal.querySelector('.cf-turnstile');
+    if (turnstile && window.turnstile) {
+        window.turnstile.reset(turnstile);
+    }
+};
+
+function showConfirm(message, onConfirm, onCancel) {
+    const existing = document.querySelector('.confirm-dialog-backdrop');
+    if (existing) existing.remove();
+
+    const backdrop = document.createElement('div');
+    backdrop.className = 'confirm-dialog-backdrop';
+    backdrop.innerHTML = `
+        <div class="confirm-dialog">
+            <h3>Bestätigung</h3>
+            <p>${escapeHtml(message)}</p>
+            <div class="confirm-dialog-actions">
+                <button class="btn-secondary" id="confirmCancel">Abbrechen</button>
+                <button class="btn-danger" id="confirmOk">Bestätigen</button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(backdrop);
+
+    backdrop.querySelector('#confirmCancel').addEventListener('click', () => {
+        backdrop.remove();
+        if (onCancel) onCancel();
+    });
+
+    backdrop.querySelector('#confirmOk').addEventListener('click', () => {
+        backdrop.remove();
+        if (onConfirm) onConfirm();
+    });
+
+    backdrop.addEventListener('click', (e) => {
+        if (e.target === backdrop) {
+            backdrop.remove();
+            if (onCancel) onCancel();
+        }
+    });
+}
+
+function setupCharCounter(inputId, counterId, maxLength) {
+    const input = document.getElementById(inputId);
+    const counter = document.getElementById(counterId);
+    if (!input || !counter) return;
+
+    input.addEventListener('input', () => {
+        const length = input.value.length;
+        counter.textContent = `${length} / ${maxLength}`;
+        counter.classList.remove('warning', 'danger');
+        if (length > maxLength * 0.9) {
+            counter.classList.add('danger');
+        } else if (length > maxLength * 0.8) {
+            counter.classList.add('warning');
+        }
+    });
+}
+
+function startOtpTimer() {
+    clearInterval(state.otpTimerInterval);
+    let timeLeft = CONFIG.OTP_EXPIRY_SECONDS;
+    const timerElement = document.getElementById('otpTimer');
+    const timerContainer = timerElement?.parentElement;
+
+    if (timerContainer) timerContainer.classList.remove('expired');
+
+    state.otpTimerInterval = setInterval(() => {
+        timeLeft--;
+        if (timerElement) timerElement.textContent = timeLeft;
+
+        if (timeLeft <= 0) {
+            clearInterval(state.otpTimerInterval);
+            state.otpTimerInterval = null;
+            if (timerContainer) timerContainer.classList.add('expired');
+            showToast('Code verfallen. Bitte versuchen Sie es erneut.', 'error');
+            state.currentOTP = null;
+            state.tempRegistrationData = null;
+            setTimeout(() => window.closeModal('otpModal'), 2000);
+        }
+    }, 1000);
 }
 
 // =========================================
-// HAUPTINITIALISIERUNG
+// AUTH İŞLEMLERİ
 // =========================================
 
-document.addEventListener('DOMContentLoaded', () => {
-    // EmailJS Initialisierung
-    if (window.emailjs) {
-        window.emailjs.init("F5cGGWMEHBUJTYWe_");
-    }
-
-    if (window.lucide) {
-        window.lucide.createIcons();
-    }
-
-    // Topic ID aus URL abrufen
-    const urlParams = new URLSearchParams(window.location.search);
-    topicId = urlParams.get('id');
-
-    if (!topicId) {
-        document.body.innerHTML = '<p style="color: red; text-align: center; margin-top: 50px;">Fehler: Topic-ID nicht gefunden.</p>';
-        return;
-    }
-
-    // Topic laden
-    loadTopicData();
-
-    // Auth State
+function initAuth() {
     const loginBtn = document.getElementById('loginBtn');
     if (loginBtn) {
         loginBtn.addEventListener('click', () => {
             if (auth.currentUser) {
-                signOut(auth).then(() => showToast('Erfolgreich abgemeldet!', 'success'));
+                showConfirm('Möchtest du dich wirklich abmelden?', () => {
+                    signOut(auth).then(() => showToast('Erfolgreich abgemeldet!', 'success'));
+                });
             } else {
                 openModal('authModal');
             }
@@ -109,7 +287,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     onAuthStateChanged(auth, (user) => {
-        currentUser = user;
+        state.currentUser = user;
         if (loginBtn) {
             if (user) {
                 loginBtn.innerHTML = '<i data-lucide="log-out"></i> Abmelden';
@@ -120,156 +298,265 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             if (window.lucide) window.lucide.createIcons();
         }
-
-        // Reply Form Sichtbarkeit
         updateReplyFormVisibility();
     });
 
-    // Modal Tabs
+    // Tab geçişleri
     const tabBtns = document.querySelectorAll('.tab-btn');
     tabBtns.forEach(btn => {
         btn.addEventListener('click', (e) => {
             const tabId = e.target.getAttribute('data-tab');
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(b => {
+                b.classList.remove('active');
+                b.setAttribute('aria-selected', 'false');
+            });
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
             e.target.classList.add('active');
-            document.getElementById(tabId + 'Tab').classList.add('active');
+            e.target.setAttribute('aria-selected', 'true');
+            const tabContent = document.getElementById(tabId + 'Tab');
+            if (tabContent) tabContent.classList.add('active');
         });
     });
 
-    // =========================================
-    // REPLY FORM HANDLING
-    // =========================================
-    const replyForm = document.getElementById('replyForm');
-    if (replyForm) {
-        replyForm.addEventListener('submit', async (e) => {
+    // Escape tuşu
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            document.querySelectorAll('.modal.active').forEach(modal => {
+                window.closeModal(modal.id);
+            });
+        }
+    });
+
+    // Login form
+    const loginForm = document.getElementById('loginForm');
+    if (loginForm) {
+        loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
 
-            if (!currentUser) {
-                showToast('Du musst angemeldet sein, um eine Antwort zu schreiben.', 'error');
+            const email = sanitizeInput(document.getElementById('loginEmail').value, 254);
+            const password = document.getElementById('loginPassword').value;
+
+            if (!isValidEmail(email)) {
+                showToast('Bitte gib eine gültige E-Mail-Adresse ein.', 'error');
                 return;
             }
 
-            const turnstileResponse = new FormData(replyForm).get('cf-turnstile-response');
+            setButtonLoading('loginSubmitBtn', true);
+
+            try {
+                await signInWithEmailAndPassword(auth, email, password);
+                window.closeModal('authModal');
+                showToast('Erfolgreich angemeldet!', 'success');
+                loginForm.reset();
+            } catch (error) {
+                const message = getFirebaseErrorMessage(error.code);
+                showToast(message, 'error');
+                console.error(error);
+            } finally {
+                setButtonLoading('loginSubmitBtn', false);
+            }
+        });
+    }
+
+    // Register form
+    const registerForm = document.getElementById('registerForm');
+    if (registerForm) {
+        registerForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const turnstileResponse = new FormData(registerForm).get('cf-turnstile-response');
             if (!turnstileResponse) {
                 showToast('Bitte bestätige, dass du ein Mensch bist.', 'error');
                 return;
             }
 
-            const replyContent = document.getElementById('replyContent').value.trim();
-            if (!replyContent) {
-                showToast('Bitte gebe den Inhalt der Antwort ein.', 'error');
+            const username = sanitizeInput(document.getElementById('registerUsername').value, 30);
+            const email = sanitizeInput(document.getElementById('registerEmail').value, 254);
+            const password = document.getElementById('registerPassword').value;
+            const passwordConfirm = document.getElementById('registerPasswordConfirm').value;
+
+            if (!isValidUsername(username)) {
+                showToast('Benutzername: 3-30 Zeichen, nur Buchstaben, Zahlen und Unterstrich.', 'error');
                 return;
             }
 
+            if (!isValidEmail(email)) {
+                showToast('Bitte gib eine gültige E-Mail-Adresse ein.', 'error');
+                return;
+            }
+
+            if (password !== passwordConfirm) {
+                showToast('Die Passwörter stimmen nicht überein.', 'error');
+                return;
+            }
+
+            if (password.length < 6) {
+                showToast('Das Passwort muss mindestens 6 Zeichen lang sein.', 'error');
+                return;
+            }
+
+            setButtonLoading('registerSubmitBtn', true);
+
             try {
-                const repliesRef = ref(database, 'replies');
-                const newReplyRef = push(repliesRef);
-                await set(newReplyRef, {
-                    topicId: topicId,
-                    authorId: currentUser.uid,
-                    content: replyContent,
-                    createdAt: Date.now(),
-                    likes: 0,
-                    parentReplyId: null
+                const usersSnapshot = await get(ref(database, 'users'));
+                let emailExists = false;
+                if (usersSnapshot.exists()) {
+                    usersSnapshot.forEach(child => {
+                        if (child.val().email === email) emailExists = true;
+                    });
+                }
+
+                if (emailExists) {
+                    showToast('Diese E-Mail wird bereits verwendet.', 'error');
+                    setButtonLoading('registerSubmitBtn', false);
+                    return;
+                }
+
+                state.currentOTP = Math.floor(100000 + Math.random() * 900000).toString();
+                state.tempRegistrationData = { username, email, password };
+                state.otpAttempts = 0;
+
+                await window.emailjs.send(CONFIG.EMAILJS_SERVICE_ID, CONFIG.EMAILJS_TEMPLATE_ID, {
+                    passcode: state.currentOTP,
+                    time: "5 Minuten",
+                    to_email: email
                 });
 
-                // Topic replyCount erhöhen
-                const topicRef = ref(database, 'topics/' + topicId);
-                const topicSnapshot = await get(topicRef);
-                if (topicSnapshot.exists()) {
-                    const currentReplyCount = topicSnapshot.val().replyCount || 0;
-                    await update(topicRef, { replyCount: currentReplyCount + 1 });
-                }
-
-                // User Points erhöhen (+5)
-                const userRef = ref(database, 'users/' + currentUser.uid);
-                const userSnapshot = await get(userRef);
-                if (userSnapshot.exists()) {
-                    const currentPoints = userSnapshot.val().points || 0;
-                    await update(userRef, { points: currentPoints + 5 });
-                }
-
-                replyForm.reset();
-                if (window.turnstile) window.turnstile.reset();
-                showToast('Antwort erfolgreich erstellt!', 'success');
+                window.closeModal('authModal');
+                openModal('otpModal');
+                startOtpTimer();
+                showToast('Bestätigungscode wurde gesendet!', 'success');
 
             } catch (error) {
-                showToast('Fehler beim Erstellen der Antwort.', 'error');
+                showToast('Fehler beim Senden der E-Mail. Bitte versuche es später erneut.', 'error');
                 console.error(error);
+            } finally {
+                setButtonLoading('registerSubmitBtn', false);
             }
         });
     }
 
-    // Reply to Reply Modal - EKSIK KISim TAMAMLANDI
-    const replyToReplyForm = document.getElementById('replyToReplyForm');
-    if (replyToReplyForm) {
-        replyToReplyForm.addEventListener('submit', async (e) => {
+    // OTP Inputs
+    const otpInputs = document.querySelectorAll('.otp-input');
+    otpInputs.forEach((input, index) => {
+        input.addEventListener('input', (e) => {
+            const val = e.target.value.replace(/[^0-9]/g, '');
+            e.target.value = val;
+
+            if (val.length > 0) {
+                e.target.classList.add('filled');
+                if (index < otpInputs.length - 1) {
+                    otpInputs[index + 1].focus();
+                }
+            } else {
+                e.target.classList.remove('filled');
+            }
+        });
+
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Backspace' && e.target.value === '' && index > 0) {
+                otpInputs[index - 1].focus();
+            }
+        });
+    });
+
+    document.querySelector('.otp-input-group')?.addEventListener('paste', (e) => {
+        e.preventDefault();
+        const pasteData = e.clipboardData.getData('text').replace(/[^0-9]/g, '').substring(0, 6);
+        const inputs = document.querySelectorAll('.otp-input');
+        pasteData.split('').forEach((char, i) => {
+            if (inputs[i]) {
+                inputs[i].value = char;
+                inputs[i].classList.add('filled');
+            }
+        });
+        if (inputs[pasteData.length]) {
+            inputs[pasteData.length].focus();
+        } else if (inputs[5]) {
+            inputs[5].focus();
+        }
+    });
+
+    const otpForm = document.getElementById('otpForm');
+    if (otpForm) {
+        otpForm.addEventListener('submit', async (e) => {
             e.preventDefault();
 
-            if (!currentUser) {
-                showToast('Du musst angemeldet sein.', 'error');
+            if (!state.currentOTP || !state.tempRegistrationData) {
+                showToast('Code abgelaufen. Bitte registriere dich erneut.', 'error');
+                window.closeModal('otpModal');
                 return;
             }
 
-            const turnstileResponse = new FormData(replyToReplyForm).get('cf-turnstile-response');
-            if (!turnstileResponse) {
-                showToast('Bitte bestätige, dass du ein Mensch bist.', 'error');
+            state.otpAttempts++;
+            if (state.otpAttempts > CONFIG.OTP_MAX_ATTEMPTS) {
+                showToast('Zu viele Versuche. Bitte registriere dich erneut.', 'error');
+                state.currentOTP = null;
+                state.tempRegistrationData = null;
+                window.closeModal('otpModal');
                 return;
             }
 
-            const nestedReplyContent = document.getElementById('nestedReplyContent').value.trim();
-            if (!nestedReplyContent) {
-                showToast('Bitte gebe den Inhalt der Antwort ein.', 'error');
+            let enteredOTP = Array.from(otpInputs).map(input => input.value).join('');
+            if (enteredOTP !== state.currentOTP) {
+                showToast(`Falscher Code. Noch ${CONFIG.OTP_MAX_ATTEMPTS - state.otpAttempts} Versuche.`, 'error');
                 return;
             }
+
+            setButtonLoading('otpSubmitBtn', true);
 
             try {
-                const repliesRef = ref(database, 'replies');
-                const newReplyRef = push(repliesRef);
-                await set(newReplyRef, {
-                    topicId: topicId,
-                    authorId: currentUser.uid,
-                    content: nestedReplyContent,
-                    createdAt: Date.now(),
-                    likes: 0,
-                    parentReplyId: parentReplyId
+                const userCredential = await createUserWithEmailAndPassword(
+                    auth,
+                    state.tempRegistrationData.email,
+                    state.tempRegistrationData.password
+                );
+                const user = userCredential.user;
+
+                await set(ref(database, 'users/' + user.uid), {
+                    username: state.tempRegistrationData.username,
+                    email: state.tempRegistrationData.email,
+                    points: 0,
+                    isAdmin: false,
+                    avatar: `https://api.dicebear.com/10.x/notionists-neutral/svg?seed=${user.uid}`,
+                    createdAt: Date.now()
                 });
 
-                // User Points erhöhen (+5)
-                const userRef = ref(database, 'users/' + currentUser.uid);
-                const userSnapshot = await get(userRef);
-                if (userSnapshot.exists()) {
-                    const currentPoints = userSnapshot.val().points || 0;
-                    await update(userRef, { points: currentPoints + 5 });
-                }
-
-                window.closeModal('replyToReplyModal');
-                replyToReplyForm.reset();
+                window.closeModal('otpModal');
+                clearInterval(state.otpTimerInterval);
+                state.otpTimerInterval = null;
+                showToast('Registrierung erfolgreich! Willkommen!', 'success');
+                otpForm.reset();
+                otpInputs.forEach(inp => inp.classList.remove('filled'));
                 if (window.turnstile) window.turnstile.reset();
-                showToast('Antwort erfolgreich erstellt!', 'success');
-                parentReplyId = null;
+
+                state.currentOTP = null;
+                state.tempRegistrationData = null;
 
             } catch (error) {
-                showToast('Fehler beim Erstellen der Antwort.', 'error');
+                const message = getFirebaseErrorMessage(error.code);
+                showToast('Fehler bei der Registrierung: ' + message, 'error');
                 console.error(error);
+            } finally {
+                setButtonLoading('otpSubmitBtn', false);
             }
         });
     }
-});
+}
 
 function updateReplyFormVisibility() {
     const replyFormWrapper = document.getElementById('replyFormWrapper');
     const authPromptReply = document.getElementById('authPromptReply');
+    const replyForm = document.getElementById('replyForm');
 
     if (!replyFormWrapper) return;
 
-    if (currentUser) {
-        replyFormWrapper.querySelector('form').style.display = 'block';
-        authPromptReply.style.display = 'none';
+    if (state.currentUser) {
+        if (replyForm) replyForm.style.display = 'block';
+        if (authPromptReply) authPromptReply.style.display = 'none';
     } else {
-        replyFormWrapper.querySelector('form').style.display = 'none';
-        authPromptReply.style.display = 'block';
+        if (replyForm) replyForm.style.display = 'none';
+        if (authPromptReply) authPromptReply.style.display = 'block';
 
         const loginPromptReply = document.getElementById('loginPromptReply');
         if (loginPromptReply) {
@@ -279,138 +566,207 @@ function updateReplyFormVisibility() {
 }
 
 // =========================================
-// TOPIC DATEN LADEN
+// TOPİC VERİLERİ
 // =========================================
 
 async function loadTopicData() {
     try {
-        const topicRef = ref(database, 'topics/' + topicId);
+        const topicRef = ref(database, 'topics/' + state.topicId);
         const topicSnapshot = await get(topicRef);
 
         if (!topicSnapshot.exists()) {
-            document.body.innerHTML = '<p style="color: red; text-align: center; margin-top: 50px;">Topic nicht gefunden.</p>';
+            document.body.innerHTML = `
+                <div style="text-align: center; margin-top: 100px; color: var(--danger);">
+                    <h1>404 - Topic nicht gefunden</h1>
+                    <p>Das gesuchte Thema existiert nicht oder wurde gelöscht.</p>
+                    <a href="index.html" style="margin-top: 20px; display: inline-block;">Zurück zum Forum</a>
+                </div>
+            `;
             return;
         }
 
-        currentTopic = { id: topicId, ...topicSnapshot.val() };
+        state.currentTopic = { id: state.topicId, ...topicSnapshot.val() };
 
-        // Topic Views erhöhen
-        await update(topicRef, { views: (currentTopic.views || 0) + 1 });
-        currentTopic.views = (currentTopic.views || 0) + 1;
+        // Views arttır
+        await update(topicRef, { views: (state.currentTopic.views || 0) + 1 });
+        state.currentTopic.views = (state.currentTopic.views || 0) + 1;
 
-        // Topic Daten rendern
-        renderTopicData();
-
-        // Replies laden
+        await renderTopicData();
         loadReplies();
 
     } catch (error) {
         console.error('Fehler beim Laden des Topics:', error);
+        showToast('Fehler beim Laden des Themas.', 'error');
     }
 }
 
 async function renderTopicData() {
-    // Author daten
-    const authorSnapshot = await get(ref(database, 'users/' + currentTopic.authorId));
-    const author = authorSnapshot.val() || { username: 'Unbekannt', avatar: '', points: 0, isAdmin: false };
-    const rank = getRank(author.points, author.isAdmin);
+    const topic = state.currentTopic;
+    if (!topic) return;
 
-    // Breadcrumb & Title
-    document.getElementById('topicCategory').textContent = currentTopic.category;
-    document.getElementById('topicTitle').textContent = currentTopic.title;
+    try {
+        const authorSnapshot = await get(ref(database, 'users/' + topic.authorId));
+        const author = authorSnapshot.val() || {
+            username: 'Unbekannt',
+            avatar: 'https://api.dicebear.com/10.x/notionists-neutral/svg?seed=unknown',
+            points: 0,
+            isAdmin: false
+        };
+        const rank = getRank(author.points, author.isAdmin);
 
-    // Author Info
-    document.getElementById('authorAvatar').src = author.avatar;
-    document.getElementById('authorUsername').textContent = author.username;
-    document.getElementById('authorRank').textContent = rank.name;
-    document.getElementById('authorCreatedDate').textContent = formatDate(currentTopic.createdAt);
-    document.getElementById('authorPoints').textContent = `${author.points} Punkte`;
+        const catEl = document.getElementById('topicCategory');
+        if (catEl) catEl.textContent = getCategoryLabel(topic.category);
 
-    // Stats
-    document.getElementById('replyCount').textContent = `${currentTopic.replyCount || 0} Antworten`;
-    document.getElementById('viewCount').textContent = `${currentTopic.views} Ansichten`;
+        const titleEl = document.getElementById('topicTitle');
+        if (titleEl) titleEl.textContent = topic.title;
 
-    // Content
-    document.getElementById('topicDescription').textContent = currentTopic.description;
+        const avatarEl = document.getElementById('authorAvatar');
+        if (avatarEl) {
+            avatarEl.src = author.avatar;
+            avatarEl.alt = author.username;
+        }
 
-    // Tags
-    if (currentTopic.tags && currentTopic.tags.length > 0) {
+        const usernameEl = document.getElementById('authorUsername');
+        if (usernameEl) usernameEl.textContent = author.username;
+
+        const rankEl = document.getElementById('authorRank');
+        if (rankEl) {
+            rankEl.textContent = rank.name;
+            rankEl.className = `rank-badge ${rank.class}`;
+        }
+
+        const dateEl = document.getElementById('authorCreatedDate');
+        if (dateEl) dateEl.textContent = formatDate(topic.createdAt);
+
+        const pointsEl = document.getElementById('authorPoints');
+        if (pointsEl) pointsEl.textContent = `${author.points} Punkte`;
+
+        const replyCountEl = document.getElementById('replyCount');
+        if (replyCountEl) replyCountEl.textContent = `${topic.replyCount || 0} Antworten`;
+
+        const viewCountEl = document.getElementById('viewCount');
+        if (viewCountEl) viewCountEl.textContent = `${topic.views} Ansichten`;
+
+        const descEl = document.getElementById('topicDescription');
+        if (descEl) descEl.textContent = topic.description || '';
+
         const tagsContainer = document.getElementById('topicTagsContainer');
-        tagsContainer.innerHTML = currentTopic.tags.map(tag => 
-            `<span class="tag-badge">${tag}</span>`
-        ).join('');
-    }
+        if (tagsContainer) {
+            if (topic.tags && topic.tags.length > 0) {
+                tagsContainer.innerHTML = topic.tags.map(tag =>
+                    `<span class="tag-badge">${escapeHtml(tag)}</span>`
+                ).join('');
+            } else {
+                tagsContainer.innerHTML = '';
+            }
+        }
 
-    if (window.lucide) {
-        window.lucide.createIcons();
+        if (window.lucide) window.lucide.createIcons();
+
+    } catch (error) {
+        console.error('Fehler beim Rendern des Topics:', error);
     }
 }
 
 // =========================================
-// REPLIES LADEN & RENDERN
+// CEVAPLAR (REPLIES)
 // =========================================
 
 function loadReplies() {
     const repliesRef = ref(database, 'replies');
     onValue(repliesRef, async (snapshot) => {
         const repliesContainer = document.getElementById('repliesContainer');
+        if (!repliesContainer) return;
+
         repliesContainer.innerHTML = '';
 
         if (!snapshot.exists()) {
-            repliesContainer.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 20px;">Noch keine Antworten.</p>';
+            repliesContainer.innerHTML = `
+                <div class="empty-state">
+                    <i data-lucide="message-circle" class="empty-state-icon"></i>
+                    <h3>Noch keine Antworten</h3>
+                    <p>Sei der Erste und schreibe eine Antwort!</p>
+                </div>
+            `;
+            if (window.lucide) window.lucide.createIcons();
             return;
         }
 
-        const allReplies = [];
+        state.allReplies = [];
         snapshot.forEach(childSnapshot => {
-            allReplies.push({ id: childSnapshot.key, ...childSnapshot.val() });
+            state.allReplies.push({ id: childSnapshot.key, ...childSnapshot.val() });
         });
 
-        // Nur Replies für diese Topic laden
-        const topicReplies = allReplies.filter(r => r.topicId === topicId && !r.parentReplyId);
+        const topicReplies = state.allReplies.filter(r => r.topicId === state.topicId && !r.parentReplyId);
 
         if (topicReplies.length === 0) {
-            repliesContainer.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 20px;">Noch keine Antworten.</p>';
+            repliesContainer.innerHTML = `
+                <div class="empty-state">
+                    <i data-lucide="message-circle" class="empty-state-icon"></i>
+                    <h3>Noch keine Antworten</h3>
+                    <p>Sei der Erste und schreibe eine Antwort!</p>
+                </div>
+            `;
+            if (window.lucide) window.lucide.createIcons();
             return;
         }
 
-        // Sortierung (neueste zuerst)
         topicReplies.sort((a, b) => b.createdAt - a.createdAt);
 
         for (const reply of topicReplies) {
-            const replyElement = await createReplyElement(reply, allReplies);
+            const replyElement = await createReplyElement(reply, 0);
             repliesContainer.appendChild(replyElement);
         }
 
-        if (window.lucide) {
-            window.lucide.createIcons();
-        }
+        if (window.lucide) window.lucide.createIcons();
     });
 }
 
-async function createReplyElement(reply, allReplies) {
+async function createReplyElement(reply, depth) {
     const authorSnapshot = await get(ref(database, 'users/' + reply.authorId));
-    const author = authorSnapshot.val() || { username: 'Unbekannt', avatar: '', points: 0, isAdmin: false };
+    const author = authorSnapshot.val() || {
+        username: 'Unbekannt',
+        avatar: 'https://api.dicebear.com/10.x/notionists-neutral/svg?seed=unknown',
+        points: 0,
+        isAdmin: false
+    };
     const rank = getRank(author.points, author.isAdmin);
+
+    const isLiked = state.likedReplies.has(reply.id);
+    const isAuthor = state.currentUser && state.currentUser.uid === reply.authorId;
+    const isAdmin = state.currentUser && authorSnapshot.val()?.isAdmin;
 
     const replyDiv = document.createElement('div');
     replyDiv.className = 'reply-card';
+    replyDiv.dataset.replyId = reply.id;
+
     replyDiv.innerHTML = `
         <div class="reply-header">
             <div class="reply-author">
-                <img src="${author.avatar}" alt="${author.username}" class="reply-avatar">
-                <div>
-                    <strong>${author.username}</strong>
-                    <span class="rank-badge ${rank.class}">${rank.name}</span>
-                    <div class="reply-meta" style="font-size: 0.8rem; color: var(--text-muted);">
-                        ${formatDate(reply.createdAt)}
+                <img src="${escapeHtml(author.avatar)}" alt="${escapeHtml(author.username)}" class="reply-avatar" loading="lazy">
+                <div class="reply-author-info">
+                    <div class="reply-author-name">
+                        <strong>${escapeHtml(author.username)}</strong>
+                        <span class="rank-badge ${escapeHtml(rank.class)}">${escapeHtml(rank.name)}</span>
                     </div>
+                    <div class="reply-meta">${formatDate(reply.createdAt)}</div>
                 </div>
             </div>
+            ${isAuthor || isAdmin ? `
+            <div class="reply-menu">
+                <button class="btn-action reply-menu-btn" onclick="toggleReplyMenu('${reply.id}')">
+                    <i data-lucide="more-vertical"></i>
+                </button>
+                <div class="reply-menu-dropdown" id="replyMenu-${reply.id}">
+                    ${isAuthor ? `<button onclick="editReply('${reply.id}')" class="menu-item"><i data-lucide="edit-2"></i> Bearbeiten</button>` : ''}
+                    <button onclick="deleteReply('${reply.id}')" class="menu-item danger"><i data-lucide="trash-2"></i> Löschen</button>
+                </div>
+            </div>
+            ` : ''}
         </div>
-        <div class="reply-content">${reply.content}</div>
+        <div class="reply-content" id="replyContent-${reply.id}">${escapeHtml(reply.content)}</div>
         <div class="reply-actions">
-            <button class="btn-action" onclick="likeReply('${reply.id}')">
+            <button class="btn-action ${isLiked ? 'liked' : ''}" onclick="likeReply('${reply.id}')">
                 <i data-lucide="heart"></i>
                 <span>${reply.likes || 0}</span>
             </button>
@@ -421,27 +777,170 @@ async function createReplyElement(reply, allReplies) {
         </div>
     `;
 
-    // Nested Replies laden
-    const nestedReplies = allReplies.filter(r => r.parentReplyId === reply.id);
-    if (nestedReplies.length > 0) {
-        nestedReplies.sort((a, b) => a.createdAt - b.createdAt);
-        const nestedContainer = document.createElement('div');
-        nestedContainer.className = 'nested-replies';
+    // İç içe cevaplar
+    if (depth < CONFIG.MAX_NESTED_DEPTH) {
+        const nestedReplies = state.allReplies.filter(r => r.parentReplyId === reply.id);
+        if (nestedReplies.length > 0) {
+            nestedReplies.sort((a, b) => a.createdAt - b.createdAt);
+            const nestedContainer = document.createElement('div');
+            nestedContainer.className = 'nested-replies';
 
-        for (const nestedReply of nestedReplies) {
-            const nestedElement = await createReplyElement(nestedReply, allReplies);
-            nestedContainer.appendChild(nestedElement);
+            for (const nestedReply of nestedReplies) {
+                const nestedElement = await createReplyElement(nestedReply, depth + 1);
+                nestedContainer.appendChild(nestedElement);
+            }
+
+            replyDiv.appendChild(nestedContainer);
         }
-
-        replyDiv.appendChild(nestedContainer);
     }
 
     return replyDiv;
 }
 
+// =========================================
+// CEVAP İŞLEMLERİ
+// =========================================
+
+function initReplyForms() {
+    // Ana cevap formu
+    const replyForm = document.getElementById('replyForm');
+    if (replyForm) {
+        replyForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            if (!state.currentUser) {
+                showToast('Du musst angemeldet sein, um eine Antwort zu schreiben.', 'error');
+                openModal('authModal');
+                return;
+            }
+
+            const turnstileResponse = new FormData(replyForm).get('cf-turnstile-response');
+            if (!turnstileResponse) {
+                showToast('Bitte bestätige, dass du ein Mensch bist.', 'error');
+                return;
+            }
+
+            const replyContent = sanitizeInput(document.getElementById('replyContent').value, 5000);
+            if (!replyContent || replyContent.length < 2) {
+                showToast('Bitte gebe den Inhalt der Antwort ein (mindestens 2 Zeichen).', 'error');
+                return;
+            }
+
+            setButtonLoading('replySubmitBtn', true);
+
+            try {
+                const repliesRef = ref(database, 'replies');
+                const newReplyRef = push(repliesRef);
+                await set(newReplyRef, {
+                    topicId: state.topicId,
+                    authorId: state.currentUser.uid,
+                    content: replyContent,
+                    createdAt: Date.now(),
+                    likes: 0,
+                    parentReplyId: null
+                });
+
+                // Topic replyCount arttır
+                const topicRef = ref(database, 'topics/' + state.topicId);
+                const topicSnapshot = await get(topicRef);
+                if (topicSnapshot.exists()) {
+                    const currentReplyCount = topicSnapshot.val().replyCount || 0;
+                    await update(topicRef, { replyCount: currentReplyCount + 1 });
+                }
+
+                // Kullanıcı puanı +5
+                const userRef = ref(database, 'users/' + state.currentUser.uid);
+                const userSnapshot = await get(userRef);
+                if (userSnapshot.exists()) {
+                    const currentPoints = userSnapshot.val().points || 0;
+                    await update(userRef, { points: currentPoints + 5 });
+                }
+
+                replyForm.reset();
+                document.getElementById('replyCharCounter').textContent = '0 / 5000';
+                if (window.turnstile) window.turnstile.reset();
+                showToast('Antwort erfolgreich erstellt!', 'success');
+
+            } catch (error) {
+                showToast('Fehler beim Erstellen der Antwort.', 'error');
+                console.error(error);
+            } finally {
+                setButtonLoading('replySubmitBtn', false);
+            }
+        });
+    }
+
+    // İç içe cevap formu
+    const replyToReplyForm = document.getElementById('replyToReplyForm');
+    if (replyToReplyForm) {
+        replyToReplyForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            if (!state.currentUser) {
+                showToast('Du musst angemeldet sein.', 'error');
+                return;
+            }
+
+            const turnstileResponse = new FormData(replyToReplyForm).get('cf-turnstile-response');
+            if (!turnstileResponse) {
+                showToast('Bitte bestätige, dass du ein Mensch bist.', 'error');
+                return;
+            }
+
+            const nestedReplyContent = sanitizeInput(document.getElementById('nestedReplyContent').value, 5000);
+            if (!nestedReplyContent || nestedReplyContent.length < 2) {
+                showToast('Bitte gebe den Inhalt der Antwort ein (mindestens 2 Zeichen).', 'error');
+                return;
+            }
+
+            setButtonLoading('nestedReplySubmitBtn', true);
+
+            try {
+                const repliesRef = ref(database, 'replies');
+                const newReplyRef = push(repliesRef);
+                await set(newReplyRef, {
+                    topicId: state.topicId,
+                    authorId: state.currentUser.uid,
+                    content: nestedReplyContent,
+                    createdAt: Date.now(),
+                    likes: 0,
+                    parentReplyId: state.parentReplyId
+                });
+
+                // Kullanıcı puanı +5
+                const userRef = ref(database, 'users/' + state.currentUser.uid);
+                const userSnapshot = await get(userRef);
+                if (userSnapshot.exists()) {
+                    const currentPoints = userSnapshot.val().points || 0;
+                    await update(userRef, { points: currentPoints + 5 });
+                }
+
+                window.closeModal('replyToReplyModal');
+                replyToReplyForm.reset();
+                document.getElementById('nestedReplyCharCounter').textContent = '0 / 5000';
+                if (window.turnstile) window.turnstile.reset();
+                showToast('Antwort erfolgreich erstellt!', 'success');
+                state.parentReplyId = null;
+
+            } catch (error) {
+                showToast('Fehler beim Erstellen der Antwort.', 'error');
+                console.error(error);
+            } finally {
+                setButtonLoading('nestedReplySubmitBtn', false);
+            }
+        });
+    }
+}
+
 window.likeReply = async function(replyId) {
-    if (!currentUser) {
+    if (!state.currentUser) {
         showToast('Du musst angemeldet sein, um zu liken.', 'error');
+        openModal('authModal');
+        return;
+    }
+
+    if (state.likedReplies.has(replyId)) {
+        showToast('Du hast diesen Beitrag bereits geliked.', 'warning');
         return;
     }
 
@@ -451,24 +950,170 @@ window.likeReply = async function(replyId) {
         if (replySnapshot.exists()) {
             const currentLikes = replySnapshot.val().likes || 0;
             await update(replyRef, { likes: currentLikes + 1 });
+            state.likedReplies.add(replyId);
             showToast('Liked!', 'success');
         }
     } catch (error) {
         showToast('Fehler beim Liken.', 'error');
+        console.error(error);
     }
 };
 
 window.openReplyToReplyModal = function(replyId) {
-    if (!currentUser) {
+    if (!state.currentUser) {
         showToast('Du musst angemeldet sein, um zu antworten.', 'error');
+        openModal('authModal');
         return;
     }
 
-    parentReplyId = replyId;
-    
-    // Quote anzeigen (optional: Author-Name abrufen und anzeigen)
+    state.parentReplyId = replyId;
+
     const quoteSection = document.getElementById('quoteSection');
-    quoteSection.innerHTML = `<p><strong>Antwort auf Reply #${replyId.substring(0, 6)}</strong></p>`;
-    
+    if (quoteSection) {
+        // Cevabı bul ve alıntı yap
+        const reply = state.allReplies.find(r => r.id === replyId);
+        if (reply) {
+            const truncatedContent = reply.content.length > 150
+                ? reply.content.substring(0, 150) + '...'
+                : reply.content;
+            quoteSection.innerHTML = `
+                <div class="quote-author">Antwort auf:</div>
+                <div class="quote-content">${escapeHtml(truncatedContent)}</div>
+            `;
+        } else {
+            quoteSection.innerHTML = `<div class="quote-author">Antwort auf Reply #${replyId.substring(0, 8)}</div>`;
+        }
+    }
+
     openModal('replyToReplyModal');
 };
+
+window.toggleReplyMenu = function(replyId) {
+    const menu = document.getElementById('replyMenu-' + replyId);
+    if (!menu) return;
+
+    const isVisible = menu.classList.contains('active');
+
+    // Tüm menüleri kapat
+    document.querySelectorAll('.reply-menu-dropdown').forEach(m => m.classList.remove('active'));
+
+    if (!isVisible) {
+        menu.classList.add('active');
+    }
+};
+
+// Menü dışına tıklayınca kapat
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('.reply-menu')) {
+        document.querySelectorAll('.reply-menu-dropdown').forEach(m => m.classList.remove('active'));
+    }
+});
+
+window.editReply = async function(replyId) {
+    const reply = state.allReplies.find(r => r.id === replyId);
+    if (!reply) return;
+
+    if (!state.currentUser || state.currentUser.uid !== reply.authorId) {
+        showToast('Du kannst nur deine eigenen Antworten bearbeiten.', 'error');
+        return;
+    }
+
+    const newContent = prompt('Antwort bearbeiten:', reply.content);
+    if (newContent === null) return;
+
+    const sanitizedContent = sanitizeInput(newContent, 5000);
+    if (!sanitizedContent || sanitizedContent.length < 2) {
+        showToast('Der Inhalt muss mindestens 2 Zeichen lang sein.', 'error');
+        return;
+    }
+
+    try {
+        await update(ref(database, 'replies/' + replyId), {
+            content: sanitizedContent,
+            editedAt: Date.now()
+        });
+        showToast('Antwort erfolgreich bearbeitet!', 'success');
+    } catch (error) {
+        showToast('Fehler beim Bearbeiten.', 'error');
+        console.error(error);
+    }
+};
+
+window.deleteReply = async function(replyId) {
+    const reply = state.allReplies.find(r => r.id === replyId);
+    if (!reply) return;
+
+    if (!state.currentUser || state.currentUser.uid !== reply.authorId) {
+        showToast('Du kannst nur deine eigenen Antworten löschen.', 'error');
+        return;
+    }
+
+    showConfirm('Möchtest du diese Antwort wirklich löschen?', async () => {
+        try {
+            await remove(ref(database, 'replies/' + replyId));
+
+            // İç içe cevapları da sil
+            const nestedReplies = state.allReplies.filter(r => r.parentReplyId === replyId);
+            for (const nested of nestedReplies) {
+                await remove(ref(database, 'replies/' + nested.id));
+            }
+
+            // Topic replyCount güncelle
+            const topicRef = ref(database, 'topics/' + state.topicId);
+            const topicSnapshot = await get(topicRef);
+            if (topicSnapshot.exists()) {
+                const currentReplyCount = topicSnapshot.val().replyCount || 0;
+                const deletedCount = 1 + nestedReplies.length;
+                await update(topicRef, { replyCount: Math.max(0, currentReplyCount - deletedCount) });
+            }
+
+            showToast('Antwort erfolgreich gelöscht!', 'success');
+        } catch (error) {
+            showToast('Fehler beim Löschen.', 'error');
+            console.error(error);
+        }
+    });
+};
+
+// =========================================
+// ANA BAŞLATMA
+// =========================================
+
+document.addEventListener('DOMContentLoaded', () => {
+    // EmailJS başlat
+    if (window.emailjs) {
+        window.emailjs.init(CONFIG.EMAILJS_PUBLIC_KEY);
+    }
+
+    if (window.lucide) {
+        window.lucide.createIcons();
+    }
+
+    // Topic ID
+    const urlParams = new URLSearchParams(window.location.search);
+    state.topicId = urlParams.get('id');
+
+    if (!state.topicId) {
+        document.body.innerHTML = `
+            <div style="text-align: center; margin-top: 100px; color: var(--danger);">
+                <h1>Fehler</h1>
+                <p>Topic-ID nicht gefunden.</p>
+                <a href="index.html" style="margin-top: 20px; display: inline-block;">Zurück zum Forum</a>
+            </div>
+        `;
+        return;
+    }
+
+    // Karakter sayaçları
+    setupCharCounter('replyContent', 'replyCharCounter', 5000);
+    setupCharCounter('nestedReplyContent', 'nestedReplyCharCounter', 5000);
+
+    // Auth başlat
+    initAuth();
+
+    // Cevap formlarını başlat
+    initReplyForms();
+
+    // Topic verilerini yükle
+    loadTopicData();
+});

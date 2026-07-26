@@ -3,18 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Thema im Higum Forum ansehen und diskutieren.">
+    <meta name="theme-color" content="#0b0f17">
     <title>Thema - Higum Forum</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>">
     <link rel="stylesheet" href="styles.css">
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
-    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+    <script src="https://unpkg.com/lucide@latest" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js" crossorigin="anonymous"></script>
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer crossorigin="anonymous"></script>
 </head>
 <body>
     <!-- HEADER / NAVBAR -->
     <header class="navbar">
         <div class="navbar-container">
             <div class="navbar-left">
-                <a href="index.html" class="logo">
+                <a href="index.html" class="logo" aria-label="Zurück zur Startseite">
                     <i data-lucide="shield-alert" class="icon-md"></i>
                     <span>Higum</span>
                 </a>
@@ -23,12 +26,12 @@
             <div class="navbar-center">
                 <div class="search-box">
                     <i data-lucide="search" class="search-icon"></i>
-                    <input type="text" id="searchInput" placeholder="Themen durchsuchen...">
+                    <input type="text" id="searchInput" placeholder="Themen durchsuchen..." aria-label="Themen durchsuchen" maxlength="100">
                 </div>
             </div>
 
             <div class="navbar-right">
-                <button class="btn-outline" id="loginBtn">Anmelden</button>
+                <button class="btn-outline" id="loginBtn" type="button">Anmelden</button>
                 <a href="index.html" class="btn-secondary">Forum</a>
             </div>
         </div>
@@ -88,28 +91,34 @@
 
         <!-- REPLIES SECTION -->
         <section class="replies-section">
-            <h2 class="section-title">Antworten</h2>
+            <h2 class="section-title">
+                <i data-lucide="message-circle"></i>
+                Antworten
+            </h2>
 
             <!-- REPLIES TREE -->
             <div class="replies-container" id="repliesContainer">
-                <!-- Replies will be dynamically inserted here in nested structure -->
+                <div class="skeleton skeleton-card"></div>
+                <div class="skeleton skeleton-card"></div>
             </div>
 
             <!-- NEW REPLY FORM -->
             <div class="reply-form-wrapper" id="replyFormWrapper">
                 <h3 class="reply-form-title">Antwort schreiben</h3>
                 
-                <form id="replyForm">
+                <form id="replyForm" novalidate>
                     <div class="form-group">
-                        <label>Deine Antwort</label>
-                        <textarea id="replyContent" rows="6" placeholder="Schreibe deine Antwort hier..." required></textarea>
+                        <label for="replyContent">Deine Antwort</label>
+                        <textarea id="replyContent" rows="6" placeholder="Schreibe deine Antwort hier..." required minlength="2" maxlength="5000"></textarea>
+                        <div class="char-counter" id="replyCharCounter">0 / 5000</div>
                     </div>
 
-                    <!-- Cloudflare Turnstile -->
                     <div class="cf-turnstile" data-sitekey="0x4AAAAAAD80pv0OMAdNnE2Q" data-theme="dark"></div>
 
                     <div class="reply-form-actions">
-                        <button type="submit" class="btn-primary">Antwort absenden</button>
+                        <button type="submit" class="btn-primary" id="replySubmitBtn">
+                            <span class="btn-text">Antwort absenden</span>
+                        </button>
                     </div>
                 </form>
 
@@ -128,14 +137,12 @@
         </div>
     </main>
 
-    <!-- ============================= -->
     <!-- REPLY TO REPLY MODAL -->
-    <!-- ============================= -->
-    <div class="modal" id="replyToReplyModal">
+    <div class="modal" id="replyToReplyModal" role="dialog" aria-modal="true">
         <div class="modal-content modal-lg">
             <div class="modal-header">
                 <h2>Auf Antwort antworten</h2>
-                <button class="modal-close" onclick="closeModal('replyToReplyModal')">
+                <button class="modal-close" onclick="closeModal('replyToReplyModal')" aria-label="Schließen" type="button">
                     <i data-lucide="x"></i>
                 </button>
             </div>
@@ -145,76 +152,80 @@
                     <!-- Quote will be inserted here -->
                 </div>
 
-                <form id="replyToReplyForm">
+                <form id="replyToReplyForm" novalidate>
                     <div class="form-group">
-                        <label>Deine Antwort</label>
-                        <textarea id="nestedReplyContent" rows="5" placeholder="Schreibe deine Antwort..." required></textarea>
+                        <label for="nestedReplyContent">Deine Antwort</label>
+                        <textarea id="nestedReplyContent" rows="5" placeholder="Schreibe deine Antwort..." required minlength="2" maxlength="5000"></textarea>
+                        <div class="char-counter" id="nestedReplyCharCounter">0 / 5000</div>
                     </div>
 
-                    <!-- Cloudflare Turnstile -->
                     <div class="cf-turnstile" data-sitekey="0x4AAAAAAD80pv0OMAdNnE2Q" data-theme="dark"></div>
 
-                    <button type="submit" class="btn-primary btn-block" style="margin-top: 1rem;">Antwort absenden</button>
+                    <button type="submit" class="btn-primary btn-block" style="margin-top: 1rem;" id="nestedReplySubmitBtn">
+                        <span class="btn-text">Antwort absenden</span>
+                    </button>
                 </form>
             </div>
         </div>
     </div>
 
-    <!-- LOGIN MODAL (same as index.html) -->
-    <div class="modal" id="authModal">
+    <!-- LOGIN/REGISTER MODAL -->
+    <div class="modal" id="authModal" role="dialog" aria-modal="true" aria-labelledby="authTitle2">
         <div class="modal-content modal-lg">
             <div class="modal-header">
-                <h2>Anmelden</h2>
-                <button class="modal-close" onclick="closeModal('authModal')">
+                <h2 id="authTitle2">Anmelden</h2>
+                <button class="modal-close" onclick="closeModal('authModal')" aria-label="Schließen" type="button">
                     <i data-lucide="x"></i>
                 </button>
             </div>
 
             <div class="modal-body">
-                <div class="auth-tabs">
-                    <button class="tab-btn active" data-tab="login">Anmelden</button>
-                    <button class="tab-btn" data-tab="register">Registrieren</button>
+                <div class="auth-tabs" role="tablist">
+                    <button class="tab-btn active" data-tab="login" role="tab" aria-selected="true">Anmelden</button>
+                    <button class="tab-btn" data-tab="register" role="tab" aria-selected="false">Registrieren</button>
                 </div>
 
-                <!-- LOGIN TAB -->
-                <div class="tab-content active" id="loginTab">
-                    <form id="loginForm">
+                <div class="tab-content active" id="loginTab" role="tabpanel">
+                    <form id="loginForm" novalidate>
                         <div class="form-group">
-                            <label>E-Mail</label>
-                            <input type="email" id="loginEmail" placeholder="deine@email.de" required>
+                            <label for="loginEmail">E-Mail</label>
+                            <input type="email" id="loginEmail" placeholder="deine@email.de" required maxlength="254" autocomplete="email">
                         </div>
                         <div class="form-group">
-                            <label>Passwort</label>
-                            <input type="password" id="loginPassword" placeholder="••••••••" required>
+                            <label for="loginPassword">Passwort</label>
+                            <input type="password" id="loginPassword" placeholder="••••••••" required minlength="6" maxlength="128" autocomplete="current-password">
                         </div>
-                        <button type="submit" class="btn-primary btn-block">Anmelden</button>
+                        <button type="submit" class="btn-primary btn-block" id="loginSubmitBtn">
+                            <span class="btn-text">Anmelden</span>
+                        </button>
                     </form>
                 </div>
 
-                <!-- REGISTER TAB -->
-                <div class="tab-content" id="registerTab">
-                    <form id="registerForm">
+                <div class="tab-content" id="registerTab" role="tabpanel">
+                    <form id="registerForm" novalidate>
                         <div class="form-group">
-                            <label>Benutzername</label>
-                            <input type="text" id="registerUsername" placeholder="max_mustermann" required>
+                            <label for="registerUsername">Benutzername</label>
+                            <input type="text" id="registerUsername" placeholder="max_mustermann" required minlength="3" maxlength="30" pattern="[a-zA-Z0-9_]+" autocomplete="username">
+                            <div class="input-hint">3-30 Zeichen, nur Buchstaben, Zahlen und Unterstrich</div>
                         </div>
                         <div class="form-group">
-                            <label>E-Mail</label>
-                            <input type="email" id="registerEmail" placeholder="deine@email.de" required>
+                            <label for="registerEmail">E-Mail</label>
+                            <input type="email" id="registerEmail" placeholder="deine@email.de" required maxlength="254" autocomplete="email">
                         </div>
                         <div class="form-group">
-                            <label>Passwort</label>
-                            <input type="password" id="registerPassword" placeholder="••••••••" required>
+                            <label for="registerPassword">Passwort</label>
+                            <input type="password" id="registerPassword" placeholder="••••••••" required minlength="6" maxlength="128" autocomplete="new-password">
                         </div>
                         <div class="form-group">
-                            <label>Passwort wiederholen</label>
-                            <input type="password" id="registerPasswordConfirm" placeholder="••••••••" required>
+                            <label for="registerPasswordConfirm">Passwort wiederholen</label>
+                            <input type="password" id="registerPasswordConfirm" placeholder="••••••••" required minlength="6" maxlength="128" autocomplete="new-password">
                         </div>
 
-                        <!-- Cloudflare Turnstile -->
                         <div class="cf-turnstile" data-sitekey="0x4AAAAAAD80pv0OMAdNnE2Q" data-theme="dark"></div>
 
-                        <button type="submit" class="btn-primary btn-block" style="margin-top: 1rem;">Registrieren</button>
+                        <button type="submit" class="btn-primary btn-block" style="margin-top: 1rem;" id="registerSubmitBtn">
+                            <span class="btn-text">Registrieren</span>
+                        </button>
                     </form>
                 </div>
             </div>
@@ -222,11 +233,11 @@
     </div>
 
     <!-- OTP MODAL -->
-    <div class="modal" id="otpModal">
+    <div class="modal" id="otpModal" role="dialog" aria-modal="true" aria-labelledby="otpTitle2">
         <div class="modal-content modal-md">
             <div class="modal-header">
-                <h2>E-Mail Bestätigung</h2>
-                <button class="modal-close" onclick="closeModal('otpModal')">
+                <h2 id="otpTitle2">E-Mail Bestätigung</h2>
+                <button class="modal-close" onclick="closeModal('otpModal')" aria-label="Schließen" type="button">
                     <i data-lucide="x"></i>
                 </button>
             </div>
@@ -234,17 +245,19 @@
             <div class="modal-body">
                 <p class="otp-description">Wir haben einen 6-stelligen Code an deine E-Mail gesendet.</p>
                 
-                <form id="otpForm">
+                <form id="otpForm" novalidate>
                     <div class="otp-input-group">
-                        <input type="text" class="otp-input" maxlength="1" placeholder="0" required>
-                        <input type="text" class="otp-input" maxlength="1" placeholder="0" required>
-                        <input type="text" class="otp-input" maxlength="1" placeholder="0" required>
-                        <input type="text" class="otp-input" maxlength="1" placeholder="0" required>
-                        <input type="text" class="otp-input" maxlength="1" placeholder="0" required>
-                        <input type="text" class="otp-input" maxlength="1" placeholder="0" required>
+                        <input type="number" class="otp-input" maxlength="1" placeholder="0" required inputmode="numeric" pattern="[0-9]" aria-label="OTP Ziffer 1">
+                        <input type="number" class="otp-input" maxlength="1" placeholder="0" required inputmode="numeric" pattern="[0-9]" aria-label="OTP Ziffer 2">
+                        <input type="number" class="otp-input" maxlength="1" placeholder="0" required inputmode="numeric" pattern="[0-9]" aria-label="OTP Ziffer 3">
+                        <input type="number" class="otp-input" maxlength="1" placeholder="0" required inputmode="numeric" pattern="[0-9]" aria-label="OTP Ziffer 4">
+                        <input type="number" class="otp-input" maxlength="1" placeholder="0" required inputmode="numeric" pattern="[0-9]" aria-label="OTP Ziffer 5">
+                        <input type="number" class="otp-input" maxlength="1" placeholder="0" required inputmode="numeric" pattern="[0-9]" aria-label="OTP Ziffer 6">
                     </div>
 
-                    <button type="submit" class="btn-primary btn-block">Bestätigen</button>
+                    <button type="submit" class="btn-primary btn-block" id="otpSubmitBtn">
+                        <span class="btn-text">Bestätigen</span>
+                    </button>
                     
                     <div class="otp-timer">
                         Code verfällt in: <span id="otpTimer">300</span>s
@@ -255,7 +268,7 @@
     </div>
 
     <!-- TOAST NOTIFICATIONS -->
-    <div id="toastContainer" class="toast-container"></div>
+    <div id="toastContainer" class="toast-container" aria-live="polite" aria-atomic="true"></div>
 
     <script type="module" src="topic.js"></script>
 </body>

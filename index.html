@@ -3,33 +3,42 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Higum Forum - Die moderne Community-Plattform für Diskussionen, Hilfe und Austausch.">
+    <meta name="keywords" content="Forum, Community, Diskussion, Hilfe, Support">
+    <meta name="author" content="Higum">
+    <meta name="theme-color" content="#0b0f17">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://unpkg.com https://cdn.jsdelivr.net https://challenges.cloudflare.com 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src https://*.firebaseio.com https://*.googleapis.com; img-src * data: blob:; frame-src https://challenges.cloudflare.com;">
     <title>Higum Forum</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>">
     <link rel="stylesheet" href="styles.css">
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
-    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+    <script src="https://unpkg.com/lucide@latest" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js" crossorigin="anonymous"></script>
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer crossorigin="anonymous"></script>
 </head>
 <body>
     <!-- HEADER / NAVBAR -->
     <header class="navbar">
         <div class="navbar-container">
             <div class="navbar-left">
-                <div class="logo">
+                <a href="index.html" class="logo" aria-label="Higum Forum Startseite">
                     <i data-lucide="shield-alert" class="icon-md"></i>
                     <span>Higum</span>
-                </div>
+                </a>
             </div>
 
             <div class="navbar-center">
                 <div class="search-box">
                     <i data-lucide="search" class="search-icon"></i>
-                    <input type="text" id="searchInput" placeholder="Themen durchsuchen...">
+                    <input type="text" id="searchInput" placeholder="Themen durchsuchen..." aria-label="Themen durchsuchen" maxlength="100">
                 </div>
             </div>
 
             <div class="navbar-right">
-                <button class="btn-outline" id="loginBtn">Anmelden</button>
-                <button class="btn-primary" id="newTopicBtn">Neues Thema erstellen</button>
+                <button class="btn-outline" id="loginBtn" type="button">Anmelden</button>
+                <button class="btn-primary" id="newTopicBtn" type="button">
+                    <i data-lucide="plus"></i>
+                    Neues Thema
+                </button>
             </div>
         </div>
     </header>
@@ -39,32 +48,32 @@
         <!-- CATEGORIES SIDEBAR -->
         <aside class="categories-sidebar">
             <h3 class="sidebar-title">Kategorien</h3>
-            <div class="categories-list" id="categoriesList">
-                <div class="category-item active" data-category="all">
+            <nav class="categories-list" id="categoriesList" aria-label="Kategorien">
+                <div class="category-item active" data-category="all" role="button" tabindex="0">
                     <i data-lucide="inbox" class="cat-icon"></i>
                     <span>Alle Themen</span>
                 </div>
-                <div class="category-item" data-category="general">
+                <div class="category-item" data-category="general" role="button" tabindex="0">
                     <i data-lucide="message-square" class="cat-icon"></i>
                     <span>Allgemein</span>
                 </div>
-                <div class="category-item" data-category="announcements">
+                <div class="category-item" data-category="announcements" role="button" tabindex="0">
                     <i data-lucide="megaphone" class="cat-icon"></i>
                     <span>Ankündigungen</span>
                 </div>
-                <div class="category-item" data-category="help">
+                <div class="category-item" data-category="help" role="button" tabindex="0">
                     <i data-lucide="help-circle" class="cat-icon"></i>
                     <span>Hilfe & Support</span>
                 </div>
-                <div class="category-item" data-category="feedback">
+                <div class="category-item" data-category="feedback" role="button" tabindex="0">
                     <i data-lucide="star" class="cat-icon"></i>
                     <span>Feedback</span>
                 </div>
-            </div>
+            </nav>
 
             <div class="sidebar-divider"></div>
 
-            <h3 class="sidebar-title">Tags</h3>
+            <h3 class="sidebar-title">Beliebte Tags</h3>
             <div class="tags-list" id="tagsList">
                 <!-- Tags werden dynamisch gefüllt -->
             </div>
@@ -74,7 +83,7 @@
         <div class="topics-content">
             <!-- FILTER BAR -->
             <div class="filter-bar">
-                <select id="sortSelect" class="select-filter">
+                <select id="sortSelect" class="select-filter" aria-label="Sortierung">
                     <option value="newest">Neueste zuerst</option>
                     <option value="popular">Beliebt</option>
                     <option value="active">Aktiv</option>
@@ -86,13 +95,16 @@
 
             <!-- TOPICS LIST -->
             <div class="topics-list" id="topicsList">
-                <!-- Topics werden hier dynamisch eingefügt -->
+                <!-- Skeleton loading -->
+                <div class="skeleton skeleton-card"></div>
+                <div class="skeleton skeleton-card"></div>
+                <div class="skeleton skeleton-card"></div>
             </div>
 
             <!-- PAGINATION -->
-            <div class="pagination" id="pagination">
+            <nav class="pagination" id="pagination" aria-label="Seitennavigation">
                 <!-- Pagination wird dynamisch gefüllt -->
-            </div>
+            </nav>
         </div>
     </main>
 
@@ -101,60 +113,64 @@
     <!-- ============================= -->
 
     <!-- LOGIN/REGISTER MODAL -->
-    <div class="modal" id="authModal">
+    <div class="modal" id="authModal" role="dialog" aria-modal="true" aria-labelledby="authTitle">
         <div class="modal-content modal-lg">
             <div class="modal-header">
                 <h2 id="authTitle">Anmelden</h2>
-                <button class="modal-close" onclick="closeModal('authModal')">
+                <button class="modal-close" onclick="closeModal('authModal')" aria-label="Schließen" type="button">
                     <i data-lucide="x"></i>
                 </button>
             </div>
 
             <div class="modal-body">
-                <div class="auth-tabs">
-                    <button class="tab-btn active" data-tab="login">Anmelden</button>
-                    <button class="tab-btn" data-tab="register">Registrieren</button>
+                <div class="auth-tabs" role="tablist">
+                    <button class="tab-btn active" data-tab="login" role="tab" aria-selected="true">Anmelden</button>
+                    <button class="tab-btn" data-tab="register" role="tab" aria-selected="false">Registrieren</button>
                 </div>
 
                 <!-- LOGIN TAB -->
-                <div class="tab-content active" id="loginTab">
-                    <form id="loginForm">
+                <div class="tab-content active" id="loginTab" role="tabpanel">
+                    <form id="loginForm" novalidate>
                         <div class="form-group">
-                            <label>E-Mail</label>
-                            <input type="email" id="loginEmail" placeholder="deine@email.de" required>
+                            <label for="loginEmail">E-Mail</label>
+                            <input type="email" id="loginEmail" placeholder="deine@email.de" required maxlength="254" autocomplete="email">
                         </div>
                         <div class="form-group">
-                            <label>Passwort</label>
-                            <input type="password" id="loginPassword" placeholder="••••••••" required>
+                            <label for="loginPassword">Passwort</label>
+                            <input type="password" id="loginPassword" placeholder="••••••••" required minlength="6" maxlength="128" autocomplete="current-password">
                         </div>
-                        <button type="submit" class="btn-primary btn-block">Anmelden</button>
+                        <button type="submit" class="btn-primary btn-block" id="loginSubmitBtn">
+                            <span class="btn-text">Anmelden</span>
+                        </button>
                     </form>
                 </div>
 
                 <!-- REGISTER TAB -->
-                <div class="tab-content" id="registerTab">
-                    <form id="registerForm">
+                <div class="tab-content" id="registerTab" role="tabpanel">
+                    <form id="registerForm" novalidate>
                         <div class="form-group">
-                            <label>Benutzername</label>
-                            <input type="text" id="registerUsername" placeholder="max_mustermann" required>
+                            <label for="registerUsername">Benutzername</label>
+                            <input type="text" id="registerUsername" placeholder="max_mustermann" required minlength="3" maxlength="30" pattern="[a-zA-Z0-9_]+" autocomplete="username">
+                            <div class="input-hint">3-30 Zeichen, nur Buchstaben, Zahlen und Unterstrich</div>
                         </div>
                         <div class="form-group">
-                            <label>E-Mail</label>
-                            <input type="email" id="registerEmail" placeholder="deine@email.de" required>
+                            <label for="registerEmail">E-Mail</label>
+                            <input type="email" id="registerEmail" placeholder="deine@email.de" required maxlength="254" autocomplete="email">
                         </div>
                         <div class="form-group">
-                            <label>Passwort</label>
-                            <input type="password" id="registerPassword" placeholder="••••••••" required>
+                            <label for="registerPassword">Passwort</label>
+                            <input type="password" id="registerPassword" placeholder="••••••••" required minlength="6" maxlength="128" autocomplete="new-password">
                         </div>
                         <div class="form-group">
-                            <label>Passwort wiederholen</label>
-                            <input type="password" id="registerPasswordConfirm" placeholder="••••••••" required>
+                            <label for="registerPasswordConfirm">Passwort wiederholen</label>
+                            <input type="password" id="registerPasswordConfirm" placeholder="••••••••" required minlength="6" maxlength="128" autocomplete="new-password">
                         </div>
 
-                        <!-- Cloudflare Turnstile -->
                         <div class="cf-turnstile" data-sitekey="0x4AAAAAAD80pv0OMAdNnE2Q" data-theme="dark"></div>
 
-                        <button type="submit" class="btn-primary btn-block" style="margin-top: 1rem;">Registrieren</button>
+                        <button type="submit" class="btn-primary btn-block" style="margin-top: 1rem;" id="registerSubmitBtn">
+                            <span class="btn-text">Registrieren</span>
+                        </button>
                     </form>
                 </div>
             </div>
@@ -162,11 +178,11 @@
     </div>
 
     <!-- OTP EMAIL VERIFICATION MODAL -->
-    <div class="modal" id="otpModal">
+    <div class="modal" id="otpModal" role="dialog" aria-modal="true" aria-labelledby="otpTitle">
         <div class="modal-content modal-md">
             <div class="modal-header">
-                <h2>E-Mail Bestätigung</h2>
-                <button class="modal-close" onclick="closeModal('otpModal')">
+                <h2 id="otpTitle">E-Mail Bestätigung</h2>
+                <button class="modal-close" onclick="closeModal('otpModal')" aria-label="Schließen" type="button">
                     <i data-lucide="x"></i>
                 </button>
             </div>
@@ -174,17 +190,19 @@
             <div class="modal-body">
                 <p class="otp-description">Wir haben einen 6-stelligen Code an deine E-Mail gesendet.</p>
                 
-                <form id="otpForm">
+                <form id="otpForm" novalidate>
                     <div class="otp-input-group">
-                        <input type="text" class="otp-input" maxlength="1" placeholder="0" required>
-                        <input type="text" class="otp-input" maxlength="1" placeholder="0" required>
-                        <input type="text" class="otp-input" maxlength="1" placeholder="0" required>
-                        <input type="text" class="otp-input" maxlength="1" placeholder="0" required>
-                        <input type="text" class="otp-input" maxlength="1" placeholder="0" required>
-                        <input type="text" class="otp-input" maxlength="1" placeholder="0" required>
+                        <input type="number" class="otp-input" maxlength="1" placeholder="0" required inputmode="numeric" pattern="[0-9]" aria-label="OTP Ziffer 1">
+                        <input type="number" class="otp-input" maxlength="1" placeholder="0" required inputmode="numeric" pattern="[0-9]" aria-label="OTP Ziffer 2">
+                        <input type="number" class="otp-input" maxlength="1" placeholder="0" required inputmode="numeric" pattern="[0-9]" aria-label="OTP Ziffer 3">
+                        <input type="number" class="otp-input" maxlength="1" placeholder="0" required inputmode="numeric" pattern="[0-9]" aria-label="OTP Ziffer 4">
+                        <input type="number" class="otp-input" maxlength="1" placeholder="0" required inputmode="numeric" pattern="[0-9]" aria-label="OTP Ziffer 5">
+                        <input type="number" class="otp-input" maxlength="1" placeholder="0" required inputmode="numeric" pattern="[0-9]" aria-label="OTP Ziffer 6">
                     </div>
 
-                    <button type="submit" class="btn-primary btn-block">Bestätigen</button>
+                    <button type="submit" class="btn-primary btn-block" id="otpSubmitBtn">
+                        <span class="btn-text">Bestätigen</span>
+                    </button>
                     
                     <div class="otp-timer">
                         Code verfällt in: <span id="otpTimer">300</span>s
@@ -195,19 +213,19 @@
     </div>
 
     <!-- NEW TOPIC MODAL -->
-    <div class="modal" id="newTopicModal">
+    <div class="modal" id="newTopicModal" role="dialog" aria-modal="true" aria-labelledby="newTopicTitle">
         <div class="modal-content modal-lg">
             <div class="modal-header">
-                <h2>Neues Thema erstellen</h2>
-                <button class="modal-close" onclick="closeModal('newTopicModal')">
+                <h2 id="newTopicTitle">Neues Thema erstellen</h2>
+                <button class="modal-close" onclick="closeModal('newTopicModal')" aria-label="Schließen" type="button">
                     <i data-lucide="x"></i>
                 </button>
             </div>
 
             <div class="modal-body">
-                <form id="newTopicForm">
+                <form id="newTopicForm" novalidate>
                     <div class="form-group">
-                        <label>Kategorie</label>
+                        <label for="topicCategory">Kategorie</label>
                         <select id="topicCategory" required>
                             <option value="">-- Wähle eine Kategorie --</option>
                             <option value="general">Allgemein</option>
@@ -218,31 +236,33 @@
                     </div>
 
                     <div class="form-group">
-                        <label>Thema Titel</label>
-                        <input type="text" id="topicTitle" placeholder="Gib deinem Thema einen aussagekräftigen Titel..." required>
+                        <label for="topicTitle">Thema Titel</label>
+                        <input type="text" id="topicTitle" placeholder="Gib deinem Thema einen aussagekräftigen Titel..." required minlength="5" maxlength="200">
                     </div>
 
                     <div class="form-group">
-                        <label>Beschreibung</label>
-                        <textarea id="topicDescription" rows="6" placeholder="Erläutere dein Thema hier..."></textarea>
+                        <label for="topicDescription">Beschreibung</label>
+                        <textarea id="topicDescription" rows="6" placeholder="Erläutere dein Thema hier..." maxlength="5000"></textarea>
+                        <div class="char-counter" id="descCharCounter">0 / 5000</div>
                     </div>
 
                     <div class="form-group">
-                        <label>Tags (durch Komma getrennt)</label>
-                        <input type="text" id="topicTags" placeholder="z.B. fehler, frage, vorschlag">
+                        <label for="topicTags">Tags (durch Komma getrennt)</label>
+                        <input type="text" id="topicTags" placeholder="z.B. fehler, frage, vorschlag" maxlength="100">
                     </div>
 
-                    <!-- Cloudflare Turnstile for Topic Creation -->
                     <div class="cf-turnstile" data-sitekey="0x4AAAAAAD80pv0OMAdNnE2Q" data-theme="dark"></div>
 
-                    <button type="submit" class="btn-primary btn-block" style="margin-top: 1rem;">Thema erstellen</button>
+                    <button type="submit" class="btn-primary btn-block" style="margin-top: 1rem;" id="topicSubmitBtn">
+                        <span class="btn-text">Thema erstellen</span>
+                    </button>
                 </form>
             </div>
         </div>
     </div>
 
     <!-- TOAST NOTIFICATIONS -->
-    <div id="toastContainer" class="toast-container"></div>
+    <div id="toastContainer" class="toast-container" aria-live="polite" aria-atomic="true"></div>
 
     <script type="module" src="app.js"></script>
 </body>

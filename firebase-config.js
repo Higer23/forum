@@ -9,7 +9,7 @@ import { getDatabase } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-
 const firebaseConfig = {
     apiKey: "AIzaSyCp2pvN0b_NS2PYc8c9QeafbhMpju78RKc",
     authDomain: "higforum.firebaseapp.com",
-    databaseURL: "https://higforum-defaultrtdb.europe-west1.firebasedatabase.app",
+    databaseURL: "https://higforum-default-rtdb.europe-west1.firebasedatabase.app",
     projectId: "higforum",
     storageBucket: "higforum.firebasestorage.app",
     messagingSenderId: "1012623822096",

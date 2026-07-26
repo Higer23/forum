@@ -9,7 +9,9 @@ import {
     createUserWithEmailAndPassword, 
     signInWithEmailAndPassword, 
     onAuthStateChanged, 
-    signOut 
+    signOut,
+    signInWithPopup,
+    GoogleAuthProvider
 } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
 import { 
     ref, set, get, push, onValue, update, query, orderByChild, limitToLast 
@@ -517,6 +519,43 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+
+    // =========================================
+    // GOOGLE LOGIN
+    // =========================================
+    const googleLoginBtn = document.getElementById('googleLoginBtn');
+    googleLoginBtn?.addEventListener('click', async () => {
+        const provider = new GoogleAuthProvider();
+
+        try {
+            const result = await signInWithPopup(auth, provider);
+            const user = result.user;
+
+            // Kullanıcı ilk kez giriş yapıyorsa users/ altında kayıt oluştur
+            const userRef = ref(database, 'users/' + user.uid);
+            const userSnapshot = await get(userRef);
+
+            if (!userSnapshot.exists()) {
+                await set(userRef, {
+                    username: user.displayName || user.email.split('@')[0],
+                    email: user.email,
+                    points: 0,
+                    isAdmin: false,
+                    avatar: user.photoURL || `https://api.dicebear.com/10.x/notionists-neutral/svg?seed=${user.uid}`,
+                    createdAt: Date.now()
+                });
+            }
+
+            window.closeModal('authModal');
+            showToast('Erfolgreich mit Google angemeldet!', 'success');
+
+        } catch (error) {
+            console.error('Google giriş hatası:', error.code, error.message);
+            if (error.code !== 'auth/popup-closed-by-user') {
+                showToast('Google-Anmeldung fehlgeschlagen: ' + getFirebaseErrorMessage(error.code), 'error');
+            }
+        }
+    });
 
     // =========================================
     // REGISTRATION & OTP

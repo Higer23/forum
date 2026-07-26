@@ -7,10 +7,61 @@
     <meta name="keywords" content="Forum, Community, Diskussion, Hilfe, Support">
     <meta name="author" content="Higum">
     <meta name="theme-color" content="#0b0f17">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://unpkg.com https://cdn.jsdelivr.net https://challenges.cloudflare.com 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src https://*.firebaseio.com https://*.googleapis.com; img-src * data: blob:; frame-src https://challenges.cloudflare.com;">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://unpkg.com https://cdn.jsdelivr.net https://challenges.cloudflare.com https://apis.google.com 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src https://*.firebaseio.com https://*.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com; img-src * data: blob:; frame-src https://challenges.cloudflare.com https://*.firebaseapp.com https://accounts.google.com;">
     <title>Higum Forum</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>">
     <link rel="stylesheet" href="styles.css">
+    <style>
+        /* Google Sign-In - izole ek stiller, styles.css'e dokunmaz */
+        .auth-divider {
+            display: flex;
+            align-items: center;
+            text-align: center;
+            margin: 1.25rem 0;
+            color: var(--text-secondary, #8b94a3);
+            font-size: 0.85rem;
+        }
+        .auth-divider::before,
+        .auth-divider::after {
+            content: '';
+            flex: 1;
+            border-bottom: 1px solid var(--border-color, rgba(255,255,255,0.1));
+        }
+        .auth-divider span {
+            padding: 0 0.75rem;
+        }
+        .btn-google {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            width: 100%;
+            padding: 0.65rem 1.25rem;
+            background-color: #ffffff;
+            color: #3c4043;
+            border: 1px solid #dadce0;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.95rem;
+            cursor: pointer;
+            transition: background-color 0.2s ease, box-shadow 0.2s ease;
+        }
+        .btn-google:hover {
+            background-color: #f7f8f8;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+        }
+        .btn-google:active {
+            background-color: #f1f3f4;
+        }
+        .btn-google:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        .btn-google .google-icon {
+            width: 18px;
+            height: 18px;
+        }
+    </style>
     <script src="https://unpkg.com/lucide@latest" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js" crossorigin="anonymous"></script>
     <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer crossorigin="anonymous"></script>
@@ -143,6 +194,15 @@
                             <span class="btn-text">Anmelden</span>
                         </button>
                     </form>
+
+                    <div class="auth-divider" role="separator">
+                        <span>Oder</span>
+                    </div>
+
+                    <button type="button" class="btn-google btn-block" id="googleLoginBtn">
+                        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="" class="google-icon" aria-hidden="true">
+                        <span class="btn-text">Mit Google anmelden</span>
+                    </button>
                 </div>
 
                 <!-- REGISTER TAB -->

@@ -608,7 +608,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
             try {
                 // Check existing users by email
-                const usersSnapshot = await get(ref(database, 'users'));
+                let usersSnapshot;
+                try {
+                    usersSnapshot = await get(ref(database, 'users'));
+                } catch (dbError) {
+                    console.error('Datenbankfehler:', dbError);
+                    showToast('Datenbankverbindung fehlgeschlagen. Bitte databaseURL / Firebase-Regeln prüfen.', 'error');
+                    setButtonLoading('registerSubmitBtn', false);
+                    return;
+                }
+
                 let emailExists = false;
                 usersSnapshot.forEach(child => {
                     if (child.val().email === email) emailExists = true;
@@ -625,11 +634,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 state.tempRegistrationData = { username, email, password };
                 state.otpAttempts = 0;
 
-                await window.emailjs.send(CONFIG.EMAILJS_SERVICE_ID, CONFIG.EMAILJS_TEMPLATE_ID, {
-                    passcode: state.currentOTP,
-                    time: "5 Minuten",
-                    to_email: email
-                });
+                if (!window.emailjs) {
+                    throw new Error('EmailJS wurde nicht geladen. Bitte Internetverbindung prüfen und Seite neu laden.');
+                }
+
+                // Guard against EmailJS hanging forever (e.g. blocked by network/CSP)
+                const sendWithTimeout = Promise.race([
+                    window.emailjs.send(CONFIG.EMAILJS_SERVICE_ID, CONFIG.EMAILJS_TEMPLATE_ID, {
+                        passcode: state.currentOTP,
+                        time: "5 Minuten",
+                        to_email: email
+                    }),
+                    new Promise((_, reject) =>
+                        setTimeout(() => reject(new Error('TIMEOUT')), 15000)
+                    )
+                ]);
+
+                await sendWithTimeout;
 
                 window.closeModal('authModal');
                 openModal('otpModal');
@@ -640,8 +661,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.error('Registrierungsfehler:', error);
                 if (error.code === 'PERMISSION_DENIED' || (error.message && error.message.includes('permission_denied'))) {
                     showToast('Datenbankzugriff verweigert. Bitte Firebase-Regeln prüfen.', 'error');
-                } else if (error.message && error.message.includes('CSP') ) {
+                } else if (error.message && error.message.includes('CSP')) {
                     showToast('Verbindung durch Sicherheitsrichtlinie blockiert.', 'error');
+                } else if (error.message === 'TIMEOUT') {
+                    showToast('E-Mail-Versand hat zu lange gedauert. Bitte erneut versuchen.', 'error');
+                } else if (error.text) {
+                    // EmailJS-specific error shape: { status, text }
+                    showToast('E-Mail-Fehler: ' + error.text, 'error');
                 } else {
                     showToast('Fehler beim Senden der E-Mail: ' + (error.message || 'Unbekannter Fehler'), 'error');
                 }
@@ -1073,4 +1099,4 @@ async function renderFilteredTopics() {
     }
     
     if (window.lucide) window.lucide.createIcons();
-}
+        }

@@ -38,6 +38,7 @@ const CONFIG = {
 const state = {
     currentTopic: null,
     currentUser: null,
+    currentUserProfile: null,
     topicId: null,
     parentReplyId: null,
     pendingVerificationUser: null,
@@ -147,6 +148,15 @@ function showToast(message, type = 'success') {
     }, 4000);
 }
 
+function safeResetTurnstile() {
+    if (!window.turnstile) return;
+    try {
+        window.turnstile.reset();
+    } catch (e) {
+        console.warn('Turnstile konnte nicht zurückgesetzt werden:', e);
+    }
+}
+
 function setButtonLoading(buttonId, loading) {
     const btn = document.getElementById(buttonId);
     if (!btn) return;
@@ -182,7 +192,11 @@ window.closeModal = function(id) {
 
     const turnstile = modal.querySelector('.cf-turnstile');
     if (turnstile && window.turnstile) {
-        window.turnstile.reset(turnstile);
+        try {
+            window.turnstile.reset(turnstile);
+        } catch (e) {
+            safeResetTurnstile();
+        }
     }
 };
 
@@ -282,8 +296,21 @@ function initAuth() {
         });
     }
 
-    onAuthStateChanged(auth, (user) => {
+    onAuthStateChanged(auth, async (user) => {
         state.currentUser = user;
+
+        if (user) {
+            try {
+                const profileSnapshot = await get(ref(database, 'users/' + user.uid));
+                state.currentUserProfile = profileSnapshot.val() || null;
+            } catch (error) {
+                console.error('Fehler beim Laden des Benutzerprofils:', error);
+                state.currentUserProfile = null;
+            }
+        } else {
+            state.currentUserProfile = null;
+        }
+
         if (loginBtn) {
             if (user) {
                 loginBtn.innerHTML = '<i data-lucide="log-out"></i> Abmelden';
@@ -436,7 +463,7 @@ function initAuth() {
                 showVerificationModal(user);
                 showToast('Registrierung erfolgreich! Bitte bestätige deine E-Mail.', 'success');
                 registerForm.reset();
-                if (window.turnstile) window.turnstile.reset();
+                safeResetTurnstile();
 
             } catch (error) {
                 console.error('Registrierungsfehler:', error);
@@ -697,7 +724,7 @@ async function createReplyElement(reply, depth) {
 
     const isLiked = state.likedReplies.has(reply.id);
     const isAuthor = state.currentUser && state.currentUser.uid === reply.authorId;
-    const isAdmin = state.currentUser && authorSnapshot.val()?.isAdmin;
+    const isAdmin = state.currentUser && state.currentUserProfile?.isAdmin === true;
 
     const replyDiv = document.createElement('div');
     replyDiv.className = 'reply-card';
@@ -821,7 +848,7 @@ function initReplyForms() {
 
                 replyForm.reset();
                 document.getElementById('replyCharCounter').textContent = '0 / 5000';
-                if (window.turnstile) window.turnstile.reset();
+                safeResetTurnstile();
                 showToast('Antwort erfolgreich erstellt!', 'success');
 
             } catch (error) {
@@ -881,7 +908,7 @@ function initReplyForms() {
                 window.closeModal('replyToReplyModal');
                 replyToReplyForm.reset();
                 document.getElementById('nestedReplyCharCounter').textContent = '0 / 5000';
-                if (window.turnstile) window.turnstile.reset();
+                safeResetTurnstile();
                 showToast('Antwort erfolgreich erstellt!', 'success');
                 state.parentReplyId = null;
 
@@ -1002,23 +1029,40 @@ window.editReply = async function(replyId) {
     }
 };
 
+/**
+ * Recursively collect a reply's ID plus every descendant reply ID at any depth,
+ * so deleting a top-level reply doesn't leave orphaned grandchildren behind.
+ */
+function collectReplyAndDescendantIds(replyId, allReplies) {
+    const idsToDelete = [replyId];
+    const directChildren = allReplies.filter(r => r.parentReplyId === replyId);
+
+    for (const child of directChildren) {
+        idsToDelete.push(...collectReplyAndDescendantIds(child.id, allReplies));
+    }
+
+    return idsToDelete;
+}
+
 window.deleteReply = async function(replyId) {
     const reply = state.allReplies.find(r => r.id === replyId);
     if (!reply) return;
 
-    if (!state.currentUser || state.currentUser.uid !== reply.authorId) {
+    const isAuthor = state.currentUser && state.currentUser.uid === reply.authorId;
+    const isAdmin = state.currentUser && state.currentUserProfile?.isAdmin === true;
+
+    if (!isAuthor && !isAdmin) {
         showToast('Du kannst nur deine eigenen Antworten löschen.', 'error');
         return;
     }
 
-    showConfirm('Möchtest du diese Antwort wirklich löschen?', async () => {
+    showConfirm('Möchtest du diese Antwort wirklich löschen? Alle Antworten darauf werden ebenfalls gelöscht.', async () => {
         try {
-            await remove(ref(database, 'replies/' + replyId));
+            // Collect the reply and ALL descendants at any nesting depth (up to MAX_NESTED_DEPTH)
+            const idsToDelete = collectReplyAndDescendantIds(replyId, state.allReplies);
 
-            // İç içe cevapları da sil
-            const nestedReplies = state.allReplies.filter(r => r.parentReplyId === replyId);
-            for (const nested of nestedReplies) {
-                await remove(ref(database, 'replies/' + nested.id));
+            for (const id of idsToDelete) {
+                await remove(ref(database, 'replies/' + id));
             }
 
             // Topic replyCount güncelle
@@ -1026,8 +1070,7 @@ window.deleteReply = async function(replyId) {
             const topicSnapshot = await get(topicRef);
             if (topicSnapshot.exists()) {
                 const currentReplyCount = topicSnapshot.val().replyCount || 0;
-                const deletedCount = 1 + nestedReplies.length;
-                await update(topicRef, { replyCount: Math.max(0, currentReplyCount - deletedCount) });
+                await update(topicRef, { replyCount: Math.max(0, currentReplyCount - idsToDelete.length) });
             }
 
             showToast('Antwort erfolgreich gelöscht!', 'success');

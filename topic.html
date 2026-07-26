@@ -9,7 +9,6 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>">
     <link rel="stylesheet" href="styles.css">
     <script src="https://unpkg.com/lucide@latest" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js" crossorigin="anonymous"></script>
     <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer crossorigin="anonymous"></script>
 </head>
 <body>
@@ -232,7 +231,7 @@
         </div>
     </div>
 
-    <!-- OTP MODAL -->
+    <!-- EMAIL VERIFICATION PENDING MODAL (Firebase built-in) -->
     <div class="modal" id="otpModal" role="dialog" aria-modal="true" aria-labelledby="otpTitle2">
         <div class="modal-content modal-md">
             <div class="modal-header">
@@ -243,26 +242,22 @@
             </div>
 
             <div class="modal-body">
-                <p class="otp-description">Wir haben einen 6-stelligen Code an deine E-Mail gesendet.</p>
-                
-                <form id="otpForm" novalidate>
-                    <div class="otp-input-group">
-                        <input type="number" class="otp-input" maxlength="1" placeholder="0" required inputmode="numeric" pattern="[0-9]" aria-label="OTP Ziffer 1">
-                        <input type="number" class="otp-input" maxlength="1" placeholder="0" required inputmode="numeric" pattern="[0-9]" aria-label="OTP Ziffer 2">
-                        <input type="number" class="otp-input" maxlength="1" placeholder="0" required inputmode="numeric" pattern="[0-9]" aria-label="OTP Ziffer 3">
-                        <input type="number" class="otp-input" maxlength="1" placeholder="0" required inputmode="numeric" pattern="[0-9]" aria-label="OTP Ziffer 4">
-                        <input type="number" class="otp-input" maxlength="1" placeholder="0" required inputmode="numeric" pattern="[0-9]" aria-label="OTP Ziffer 5">
-                        <input type="number" class="otp-input" maxlength="1" placeholder="0" required inputmode="numeric" pattern="[0-9]" aria-label="OTP Ziffer 6">
-                    </div>
+                <p class="otp-description">
+                    Wir haben dir eine Bestätigungs-E-Mail an <strong id="verifyEmailAddress"></strong> gesendet.
+                    Bitte klicke auf den Link in der E-Mail, um deinen Account zu aktivieren.
+                </p>
 
-                    <button type="submit" class="btn-primary btn-block" id="otpSubmitBtn">
-                        <span class="btn-text">Bestätigen</span>
-                    </button>
-                    
-                    <div class="otp-timer">
-                        Code verfällt in: <span id="otpTimer">300</span>s
-                    </div>
-                </form>
+                <button type="button" class="btn-primary btn-block" id="checkVerifiedBtn">
+                    <span class="btn-text">Ich habe bestätigt – weiter</span>
+                </button>
+
+                <button type="button" class="btn-outline btn-block" id="resendVerificationBtn" style="margin-top: 0.75rem;">
+                    <span class="btn-text">E-Mail erneut senden</span>
+                </button>
+
+                <div class="otp-timer" id="resendCooldownText" style="display:none;">
+                    Erneut senden möglich in: <span id="resendCooldown">60</span>s
+                </div>
             </div>
         </div>
     </div>

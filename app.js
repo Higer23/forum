@@ -11,7 +11,9 @@ import {
     onAuthStateChanged, 
     signOut,
     signInWithPopup,
-    GoogleAuthProvider
+    GoogleAuthProvider,
+    sendEmailVerification,
+    reload
 } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
 import { 
     ref, set, get, push, onValue, update, query, orderByChild, limitToLast 
@@ -21,12 +23,8 @@ import {
 // CONFIGURATION
 // =========================================
 const CONFIG = {
-    EMAILJS_PUBLIC_KEY: "F5cGGWMEHBUJTYWe_",
-    EMAILJS_SERVICE_ID: "service_rs96mwp",
-    EMAILJS_TEMPLATE_ID: "template_uvj39wr",
     TURNSTILE_SITEKEY: "0x4AAAAAAD80pv0OMAdNnE2Q",
-    OTP_EXPIRY_SECONDS: 300,
-    OTP_MAX_ATTEMPTS: 5,
+    RESEND_COOLDOWN_SECONDS: 60,
     TOPICS_PER_PAGE: 10,
     MAX_NESTED_DEPTH: 5,
     RANKS: [
@@ -42,10 +40,8 @@ const CONFIG = {
 // STATE MANAGEMENT
 // =========================================
 const state = {
-    tempRegistrationData: null,
-    currentOTP: null,
-    otpTimerInterval: null,
-    otpAttempts: 0,
+    pendingVerificationUser: null,
+    resendCooldownInterval: null,
     allTopics: [],
     currentFilter: { category: 'all', search: '', sort: 'newest', tag: null },
     currentPage: 1,
@@ -145,10 +141,10 @@ window.closeModal = function(id) {
     
     modal.classList.remove('active');
     
-    // Clear OTP timer if closing OTP modal
-    if (id === 'otpModal' && state.otpTimerInterval) {
-        clearInterval(state.otpTimerInterval);
-        state.otpTimerInterval = null;
+    // Clear resend cooldown interval if closing verification modal
+    if (id === 'otpModal' && state.resendCooldownInterval) {
+        clearInterval(state.resendCooldownInterval);
+        state.resendCooldownInterval = null;
     }
     
     // Reset turnstile if present
@@ -267,26 +263,28 @@ function showConfirm(message, onConfirm, onCancel) {
 }
 
 // =========================================
-// OTP TIMER
+// RESEND COOLDOWN TIMER (for verification email)
 // =========================================
-function startOtpTimer() {
-    clearInterval(state.otpTimerInterval);
-    let timeLeft = CONFIG.OTP_EXPIRY_SECONDS;
-    const timerElement = document.getElementById('otpTimer');
-    const timerContainer = timerElement?.parentElement;
-    
-    state.otpTimerInterval = setInterval(() => {
+function startResendCooldown() {
+    clearInterval(state.resendCooldownInterval);
+    let timeLeft = CONFIG.RESEND_COOLDOWN_SECONDS;
+    const resendBtn = document.getElementById('resendVerificationBtn');
+    const cooldownText = document.getElementById('resendCooldownText');
+    const cooldownSpan = document.getElementById('resendCooldown');
+
+    if (resendBtn) resendBtn.disabled = true;
+    if (cooldownText) cooldownText.style.display = 'block';
+    if (cooldownSpan) cooldownSpan.textContent = timeLeft;
+
+    state.resendCooldownInterval = setInterval(() => {
         timeLeft--;
-        if (timerElement) timerElement.textContent = timeLeft;
-        
+        if (cooldownSpan) cooldownSpan.textContent = timeLeft;
+
         if (timeLeft <= 0) {
-            clearInterval(state.otpTimerInterval);
-            state.otpTimerInterval = null;
-            if (timerContainer) timerContainer.classList.add('expired');
-            showToast('Code verfallen. Bitte versuchen Sie es erneut.', 'error');
-            state.currentOTP = null;
-            state.tempRegistrationData = null;
-            setTimeout(() => window.closeModal('otpModal'), 2000);
+            clearInterval(state.resendCooldownInterval);
+            state.resendCooldownInterval = null;
+            if (resendBtn) resendBtn.disabled = false;
+            if (cooldownText) cooldownText.style.display = 'none';
         }
     }, 1000);
 }
@@ -410,11 +408,6 @@ window.filterByTag = function(tag) {
 // =========================================
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Initialize EmailJS
-    if (window.emailjs) {
-        window.emailjs.init(CONFIG.EMAILJS_PUBLIC_KEY);
-    }
-
     if (window.lucide) {
         window.lucide.createIcons();
     }
@@ -506,7 +499,17 @@ document.addEventListener('DOMContentLoaded', () => {
             setButtonLoading('loginSubmitBtn', true);
 
             try {
-                await signInWithEmailAndPassword(auth, email, password);
+                const userCredential = await signInWithEmailAndPassword(auth, email, password);
+                await reload(userCredential.user);
+
+                if (!userCredential.user.emailVerified) {
+                    window.closeModal('authModal');
+                    showVerificationModal(userCredential.user);
+                    showToast('Bitte bestätige zuerst deine E-Mail-Adresse.', 'warning');
+                    setButtonLoading('loginSubmitBtn', false);
+                    return;
+                }
+
                 window.closeModal('authModal');
                 showToast('Erfolgreich angemeldet!', 'success');
                 loginForm.reset();
@@ -546,7 +549,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     points: 0,
                     isAdmin: false,
                     avatar: user.photoURL || `https://api.dicebear.com/10.x/notionists-neutral/svg?seed=${user.uid}`,
-                    createdAt: Date.now()
+                    createdAt: Date.now(),
+                    emailVerified: true
                 });
             }
 
@@ -629,47 +633,35 @@ document.addEventListener('DOMContentLoaded', () => {
                     return;
                 }
 
-                // Generate secure OTP
-                state.currentOTP = Math.floor(100000 + Math.random() * 900000).toString();
-                state.tempRegistrationData = { username, email, password };
-                state.otpAttempts = 0;
+                // Create the Firebase Auth account directly
+                const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                const user = userCredential.user;
 
-                if (!window.emailjs) {
-                    throw new Error('EmailJS wurde nicht geladen. Bitte Internetverbindung prüfen und Seite neu laden.');
-                }
+                // Save user profile in Realtime Database
+                await set(ref(database, 'users/' + user.uid), {
+                    username,
+                    email,
+                    points: 0,
+                    isAdmin: false,
+                    avatar: `https://api.dicebear.com/10.x/notionists-neutral/svg?seed=${user.uid}`,
+                    createdAt: Date.now()
+                });
 
-                // Guard against EmailJS hanging forever (e.g. blocked by network/CSP)
-                const sendWithTimeout = Promise.race([
-                    window.emailjs.send(CONFIG.EMAILJS_SERVICE_ID, CONFIG.EMAILJS_TEMPLATE_ID, {
-                        passcode: state.currentOTP,
-                        time: "5 Minuten",
-                        to_email: email
-                    }),
-                    new Promise((_, reject) =>
-                        setTimeout(() => reject(new Error('TIMEOUT')), 15000)
-                    )
-                ]);
-
-                await sendWithTimeout;
+                // Send Firebase's own verification email
+                await sendEmailVerification(user);
 
                 window.closeModal('authModal');
-                openModal('otpModal');
-                startOtpTimer();
-                showToast('Bestätigungscode wurde gesendet!', 'success');
+                showVerificationModal(user);
+                showToast('Registrierung erfolgreich! Bitte bestätige deine E-Mail.', 'success');
+                registerForm.reset();
+                if (window.turnstile) window.turnstile.reset();
 
             } catch (error) {
                 console.error('Registrierungsfehler:', error);
                 if (error.code === 'PERMISSION_DENIED' || (error.message && error.message.includes('permission_denied'))) {
                     showToast('Datenbankzugriff verweigert. Bitte Firebase-Regeln prüfen.', 'error');
-                } else if (error.message && error.message.includes('CSP')) {
-                    showToast('Verbindung durch Sicherheitsrichtlinie blockiert.', 'error');
-                } else if (error.message === 'TIMEOUT') {
-                    showToast('E-Mail-Versand hat zu lange gedauert. Bitte erneut versuchen.', 'error');
-                } else if (error.text) {
-                    // EmailJS-specific error shape: { status, text }
-                    showToast('E-Mail-Fehler: ' + error.text, 'error');
                 } else {
-                    showToast('Fehler beim Senden der E-Mail: ' + (error.message || 'Unbekannter Fehler'), 'error');
+                    showToast(getFirebaseErrorMessage(error.code) || ('Fehler: ' + error.message), 'error');
                 }
             } finally {
                 setButtonLoading('registerSubmitBtn', false);
@@ -677,111 +669,62 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // OTP Inputs Logic with paste support
-    const otpInputs = document.querySelectorAll('.otp-input');
-    otpInputs.forEach((input, index) => {
-        input.addEventListener('input', (e) => {
-            const val = e.target.value.replace(/[^0-9]/g, '');
-            e.target.value = val;
-            
-            if (val.length > 0) {
-                e.target.classList.add('filled');
-                if (index < otpInputs.length - 1) {
-                    otpInputs[index + 1].focus();
-                }
-            } else {
-                e.target.classList.remove('filled');
-            }
-        });
-        
-        input.addEventListener('keydown', (e) => {
-            if (e.key === 'Backspace' && e.target.value === '' && index > 0) {
-                otpInputs[index - 1].focus();
-            }
-        });
-    });
+    // =========================================
+    // EMAIL VERIFICATION MODAL HELPERS
+    // =========================================
+    function showVerificationModal(user) {
+        state.pendingVerificationUser = user;
+        const emailSpan = document.getElementById('verifyEmailAddress');
+        if (emailSpan) emailSpan.textContent = user.email;
+        openModal('otpModal');
+        startResendCooldown();
+    }
 
-    // Paste support for OTP
-    document.querySelector('.otp-input-group')?.addEventListener('paste', (e) => {
-        e.preventDefault();
-        const pasteData = e.clipboardData.getData('text').replace(/[^0-9]/g, '').substring(0, 6);
-        const inputs = document.querySelectorAll('.otp-input');
-        pasteData.split('').forEach((char, i) => {
-            if (inputs[i]) {
-                inputs[i].value = char;
-                inputs[i].classList.add('filled');
+    const checkVerifiedBtn = document.getElementById('checkVerifiedBtn');
+    checkVerifiedBtn?.addEventListener('click', async () => {
+        if (!state.pendingVerificationUser) {
+            window.closeModal('otpModal');
+            return;
+        }
+
+        setButtonLoading('checkVerifiedBtn', true);
+        try {
+            await reload(state.pendingVerificationUser);
+            if (state.pendingVerificationUser.emailVerified) {
+                window.closeModal('otpModal');
+                showToast('E-Mail bestätigt! Willkommen!', 'success');
+                state.pendingVerificationUser = null;
+            } else {
+                showToast('Noch nicht bestätigt. Bitte prüfe dein Postfach (auch Spam-Ordner).', 'warning');
             }
-        });
-        if (inputs[pasteData.length]) {
-            inputs[pasteData.length].focus();
-        } else if (inputs[5]) {
-            inputs[5].focus();
+        } catch (error) {
+            console.error(error);
+            showToast('Fehler beim Prüfen des Status.', 'error');
+        } finally {
+            setButtonLoading('checkVerifiedBtn', false);
         }
     });
 
-    const otpForm = document.getElementById('otpForm');
-    if (otpForm) {
-        otpForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            if (!state.currentOTP || !state.tempRegistrationData) {
-                showToast('Code abgelaufen. Bitte registriere dich erneut.', 'error');
-                window.closeModal('otpModal');
-                return;
+    const resendVerificationBtn = document.getElementById('resendVerificationBtn');
+    resendVerificationBtn?.addEventListener('click', async () => {
+        if (!state.pendingVerificationUser || resendVerificationBtn.disabled) return;
+
+        setButtonLoading('resendVerificationBtn', true);
+        try {
+            await sendEmailVerification(state.pendingVerificationUser);
+            showToast('Bestätigungs-E-Mail erneut gesendet!', 'success');
+            startResendCooldown();
+        } catch (error) {
+            console.error(error);
+            if (error.code === 'auth/too-many-requests') {
+                showToast('Zu viele Versuche. Bitte warte einen Moment.', 'error');
+            } else {
+                showToast('Fehler beim Senden der E-Mail.', 'error');
             }
-
-            state.otpAttempts++;
-            if (state.otpAttempts > CONFIG.OTP_MAX_ATTEMPTS) {
-                showToast('Zu viele Versuche. Bitte registriere dich erneut.', 'error');
-                state.currentOTP = null;
-                state.tempRegistrationData = null;
-                window.closeModal('otpModal');
-                return;
-            }
-
-            let enteredOTP = Array.from(otpInputs).map(input => input.value).join('');
-            if (enteredOTP !== state.currentOTP) {
-                showToast(`Falscher Code. Noch ${CONFIG.OTP_MAX_ATTEMPTS - state.otpAttempts} Versuche.`, 'error');
-                return;
-            }
-
-            setButtonLoading('otpSubmitBtn', true);
-
-            try {
-                const userCredential = await createUserWithEmailAndPassword(
-                    auth, 
-                    state.tempRegistrationData.email, 
-                    state.tempRegistrationData.password
-                );
-                const user = userCredential.user;
-
-                await set(ref(database, 'users/' + user.uid), {
-                    username: state.tempRegistrationData.username,
-                    email: state.tempRegistrationData.email,
-                    points: 0,
-                    isAdmin: false,
-                    avatar: `https://api.dicebear.com/10.x/notionists-neutral/svg?seed=${user.uid}`,
-                    createdAt: Date.now()
-                });
-
-                window.closeModal('otpModal');
-                clearInterval(state.otpTimerInterval);
-                state.otpTimerInterval = null;
-                showToast('Registrierung erfolgreich! Willkommen!', 'success');
-                otpForm.reset();
-                otpInputs.forEach(inp => inp.classList.remove('filled'));
-                if (window.turnstile) window.turnstile.reset();
-
-                state.currentOTP = null;
-                state.tempRegistrationData = null;
-
-            } catch (error) {
-                const message = getFirebaseErrorMessage(error.code);
-                showToast('Fehler bei der Registrierung: ' + message, 'error');
-                console.error(error);
-            } finally {
-                setButtonLoading('otpSubmitBtn', false);
-            }
+        } finally {
+            setButtonLoading('resendVerificationBtn', false);
+        }
+    });
         });
     }
 
@@ -1099,4 +1042,4 @@ async function renderFilteredTopics() {
     }
     
     if (window.lucide) window.lucide.createIcons();
-        }
+}

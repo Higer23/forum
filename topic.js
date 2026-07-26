@@ -209,12 +209,12 @@ function showConfirm(message, onConfirm, onCancel) {
 
     document.body.appendChild(backdrop);
 
-    backdrop.querySelector('#confirmCancel').addEventListener('click', () => {
+    backdrop.querySelector('#confirmCancel')?.addEventListener('click', () => {
         backdrop.remove();
         if (onCancel) onCancel();
     });
 
-    backdrop.querySelector('#confirmOk').addEventListener('click', () => {
+    backdrop.querySelector('#confirmOk')?.addEventListener('click', () => {
         backdrop.remove();
         if (onConfirm) onConfirm();
     });
@@ -305,14 +305,16 @@ function initAuth() {
     const tabBtns = document.querySelectorAll('.tab-btn');
     tabBtns.forEach(btn => {
         btn.addEventListener('click', (e) => {
-            const tabId = e.target.getAttribute('data-tab');
+            const tabButton = e.currentTarget;
+            const tabId = tabButton.dataset.tab;
+            if (!tabId) return;
             document.querySelectorAll('.tab-btn').forEach(b => {
                 b.classList.remove('active');
                 b.setAttribute('aria-selected', 'false');
             });
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-            e.target.classList.add('active');
-            e.target.setAttribute('aria-selected', 'true');
+            tabButton.classList.add('active');
+            tabButton.setAttribute('aria-selected', 'true');
             const tabContent = document.getElementById(tabId + 'Tab');
             if (tabContent) tabContent.classList.add('active');
         });
@@ -333,8 +335,8 @@ function initAuth() {
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
 
-            const email = sanitizeInput(document.getElementById('loginEmail').value, 254);
-            const password = document.getElementById('loginPassword').value;
+            const email = sanitizeInput(document.getElementById('loginEmail')?.value, 254);
+            const password = document.getElementById('loginPassword')?.value || '';
 
             if (!isValidEmail(email)) {
                 showToast('Bitte gib eine gültige E-Mail-Adresse ein.', 'error');
@@ -370,10 +372,10 @@ function initAuth() {
                 return;
             }
 
-            const username = sanitizeInput(document.getElementById('registerUsername').value, 30);
-            const email = sanitizeInput(document.getElementById('registerEmail').value, 254);
-            const password = document.getElementById('registerPassword').value;
-            const passwordConfirm = document.getElementById('registerPasswordConfirm').value;
+            const username = sanitizeInput(document.getElementById('registerUsername')?.value, 30);
+            const email = sanitizeInput(document.getElementById('registerEmail')?.value, 254);
+            const password = document.getElementById('registerPassword')?.value || '';
+            const passwordConfirm = document.getElementById('registerPasswordConfirm')?.value || '';
 
             if (!isValidUsername(username)) {
                 showToast('Benutzername: 3-30 Zeichen, nur Buchstaben, Zahlen und Unterstrich.', 'error');
@@ -820,7 +822,7 @@ function initReplyForms() {
                 return;
             }
 
-            const replyContent = sanitizeInput(document.getElementById('replyContent').value, 5000);
+            const replyContent = sanitizeInput(document.getElementById('replyContent')?.value, 5000);
             if (!replyContent || replyContent.length < 2) {
                 showToast('Bitte gebe den Inhalt der Antwort ein (mindestens 2 Zeichen).', 'error');
                 return;
@@ -857,7 +859,8 @@ function initReplyForms() {
                 }
 
                 replyForm.reset();
-                document.getElementById('replyCharCounter').textContent = '0 / 5000';
+                const replyCounter = document.getElementById('replyCharCounter');
+                if (replyCounter) replyCounter.textContent = '0 / 5000';
                 if (window.turnstile) window.turnstile.reset();
                 showToast('Antwort erfolgreich erstellt!', 'success');
 
@@ -887,7 +890,7 @@ function initReplyForms() {
                 return;
             }
 
-            const nestedReplyContent = sanitizeInput(document.getElementById('nestedReplyContent').value, 5000);
+            const nestedReplyContent = sanitizeInput(document.getElementById('nestedReplyContent')?.value, 5000);
             if (!nestedReplyContent || nestedReplyContent.length < 2) {
                 showToast('Bitte gebe den Inhalt der Antwort ein (mindestens 2 Zeichen).', 'error');
                 return;
@@ -917,7 +920,8 @@ function initReplyForms() {
 
                 window.closeModal('replyToReplyModal');
                 replyToReplyForm.reset();
-                document.getElementById('nestedReplyCharCounter').textContent = '0 / 5000';
+                const nestedReplyCounter = document.getElementById('nestedReplyCharCounter');
+                if (nestedReplyCounter) nestedReplyCounter.textContent = '0 / 5000';
                 if (window.turnstile) window.turnstile.reset();
                 showToast('Antwort erfolgreich erstellt!', 'success');
                 state.parentReplyId = null;
@@ -1002,13 +1006,6 @@ window.toggleReplyMenu = function(replyId) {
     }
 };
 
-// Menü dışına tıklayınca kapat
-document.addEventListener('click', (e) => {
-    if (!e.target.closest('.reply-menu')) {
-        document.querySelectorAll('.reply-menu-dropdown').forEach(m => m.classList.remove('active'));
-    }
-});
-
 window.editReply = async function(replyId) {
     const reply = state.allReplies.find(r => r.id === replyId);
     if (!reply) return;
@@ -1088,6 +1085,20 @@ document.addEventListener('DOMContentLoaded', () => {
     if (window.lucide) {
         window.lucide.createIcons();
     }
+
+    document.querySelectorAll('[data-close-modal]').forEach(button => {
+        button.addEventListener('click', () => {
+            const modalId = button.dataset.closeModal;
+            if (modalId) window.closeModal?.(modalId);
+        });
+    });
+
+    document.addEventListener('click', (event) => {
+        const target = event.target;
+        if (!(target instanceof Element) || !target.closest('.reply-menu')) {
+            document.querySelectorAll('.reply-menu-dropdown').forEach(menu => menu.classList.remove('active'));
+        }
+    });
 
     // Topic ID
     const urlParams = new URLSearchParams(window.location.search);

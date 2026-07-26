@@ -246,12 +246,12 @@ function showConfirm(message, onConfirm, onCancel) {
     
     document.body.appendChild(backdrop);
     
-    backdrop.querySelector('#confirmCancel').addEventListener('click', () => {
+    backdrop.querySelector('#confirmCancel')?.addEventListener('click', () => {
         backdrop.remove();
         if (onCancel) onCancel();
     });
     
-    backdrop.querySelector('#confirmOk').addEventListener('click', () => {
+    backdrop.querySelector('#confirmOk')?.addEventListener('click', () => {
         backdrop.remove();
         if (onConfirm) onConfirm();
     });
@@ -420,6 +420,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // Setup character counters
     setupCharCounter('topicDescription', 'descCharCounter', 5000);
 
+    document.querySelectorAll('[data-close-modal]').forEach(button => {
+        button.addEventListener('click', () => {
+            const modalId = button.dataset.closeModal;
+            if (modalId) window.closeModal?.(modalId);
+        });
+    });
+
     // Navbar Buttons & Auth State
     const loginBtn = document.getElementById('loginBtn');
     const newTopicBtn = document.getElementById('newTopicBtn');
@@ -464,15 +471,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const tabBtns = document.querySelectorAll('.tab-btn');
     tabBtns.forEach(btn => {
         btn.addEventListener('click', (e) => {
-            const tabId = e.target.getAttribute('data-tab');
+            const tabButton = e.currentTarget;
+            const tabId = tabButton.dataset.tab;
+            if (!tabId) return;
             document.querySelectorAll('.tab-btn').forEach(b => {
                 b.classList.remove('active');
                 b.setAttribute('aria-selected', 'false');
             });
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-            e.target.classList.add('active');
-            e.target.setAttribute('aria-selected', 'true');
-            document.getElementById(tabId + 'Tab').classList.add('active');
+            tabButton.classList.add('active');
+            tabButton.setAttribute('aria-selected', 'true');
+            document.getElementById(tabId + 'Tab')?.classList.add('active');
         });
     });
 
@@ -493,8 +502,8 @@ document.addEventListener('DOMContentLoaded', () => {
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             
-            const email = sanitizeInput(document.getElementById('loginEmail').value, 254);
-            const password = document.getElementById('loginPassword').value;
+            const email = sanitizeInput(document.getElementById('loginEmail')?.value, 254);
+            const password = document.getElementById('loginPassword')?.value || '';
 
             if (!isValidEmail(email)) {
                 showToast('Bitte gib eine gültige E-Mail-Adresse ein.', 'error');
@@ -532,10 +541,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            const username = sanitizeInput(document.getElementById('registerUsername').value, 30);
-            const email = sanitizeInput(document.getElementById('registerEmail').value, 254);
-            const password = document.getElementById('registerPassword').value;
-            const passwordConfirm = document.getElementById('registerPasswordConfirm').value;
+            const username = sanitizeInput(document.getElementById('registerUsername')?.value, 30);
+            const email = sanitizeInput(document.getElementById('registerEmail')?.value, 254);
+            const password = document.getElementById('registerPassword')?.value || '';
+            const passwordConfirm = document.getElementById('registerPasswordConfirm')?.value || '';
 
             if (!isValidUsername(username)) {
                 showToast('Benutzername: 3-30 Zeichen, nur Buchstaben, Zahlen und Unterstrich.', 'error');
@@ -721,10 +730,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            const category = document.getElementById('topicCategory').value;
-            const title = sanitizeInput(document.getElementById('topicTitle').value, 200);
-            const description = sanitizeInput(document.getElementById('topicDescription').value, 5000);
-            const tagsInput = sanitizeInput(document.getElementById('topicTags').value, 100);
+            const category = document.getElementById('topicCategory')?.value || '';
+            const title = sanitizeInput(document.getElementById('topicTitle')?.value, 200);
+            const description = sanitizeInput(document.getElementById('topicDescription')?.value, 5000);
+            const tagsInput = sanitizeInput(document.getElementById('topicTags')?.value, 100);
             const tags = tagsInput.split(',').map(tag => tag.trim().toLowerCase()).filter(tag => tag !== '');
 
             if (!category) {
@@ -769,7 +778,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 window.closeModal('newTopicModal');
                 showToast('Thema erfolgreich erstellt!', 'success');
                 newTopicForm.reset();
-                document.getElementById('descCharCounter').textContent = '0 / 5000';
+                const descriptionCounter = document.getElementById('descCharCounter');
+                if (descriptionCounter) descriptionCounter.textContent = '0 / 5000';
                 if (window.turnstile) window.turnstile.reset();
 
             } catch (error) {
@@ -958,7 +968,8 @@ async function renderFilteredTopics() {
         `;
         if (window.lucide) window.lucide.createIcons();
         if (topicCount) topicCount.innerText = '0 Themen';
-        document.getElementById('pagination').innerHTML = '';
+        const pagination = document.getElementById('pagination');
+        if (pagination) pagination.innerHTML = '';
         return;
     }
 

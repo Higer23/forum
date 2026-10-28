@@ -3,3 +3,8 @@ firebase-config.js
 .env.local
 node_modules/
 .DS_Store
+
+# Keep local secrets out of git
+.env.*
+!.env.example
+.env*.local
